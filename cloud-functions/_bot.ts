@@ -108,7 +108,7 @@ async function postAgent(opts: AgentRunOptions): Promise<void> {
       Origin: opts.origin,
       Referer: `${opts.origin}/`,
       'User-Agent':
-        'Mozilla/5.0 (compatible; ImWebhookAgent/1.0; +https://slack-webhock.edgeone.dev/)',
+        'Mozilla/5.0 (compatible; AgentForIM/1.0; +https://github.com/TencentEdgeOne/agent-for-im)',
       'makers-conversation-id': conversationId,
     },
     body: JSON.stringify({

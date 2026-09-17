@@ -1,16 +1,16 @@
 const zh = {
   // Header
-  "app.title": "OpenAI Agents Starter",
-  "app.subtitle": "基于 EdgeOne Makers 运行，支持会话记忆和 Agent 工具",
+  "app.title": "Agent for IM",
+  "app.subtitle": "同一个 Agent，接入 Slack、Discord、Telegram、飞书、企业微信和钉钉",
 
   // Empty state
-  "empty.title": "OpenAI Agents Starter",
-  "empty.hint": "我是运行在 EdgeOne 上的 OpenAI Agent，拥有自定义工具和会话记忆。我可以帮助你查询天气、穿衣建议、翻译和文本统计。",
+  "empty.title": "Agent for IM",
+  "empty.hint": "我是运行在 EdgeOne Makers 上的 OpenAI Agent。你可以在这里聊，也可以在 Slack、Discord、Telegram、飞书、企业微信或钉钉里 @我 —— 同一套工具和会话记忆。",
   "empty.features": "EdgeOne Store · 会话记忆 · Agent 工具",
 
   // Chat input
   "chat.placeholder": "输入消息...  ⏎ 发送 · Shift+⏎ 换行",
-  "chat.hint": "由 OpenAI Agents SDK + EdgeOne Makers 驱动 · 仅供演示",
+  "chat.hint": "由 OpenAI Agents SDK + EdgeOne Makers 驱动",
 
   // Preset questions
   "preset.1": "北京现在天气怎么样？有什么穿衣建议？",

@@ -1,16 +1,16 @@
 const en = {
   // Header
-  "app.title": "OpenAI Agents Starter",
-  "app.subtitle": "Running on EdgeOne Makers with session memory & Agent Tools",
+  "app.title": "Agent for IM",
+  "app.subtitle": "One agent across Slack, Discord, Telegram, Feishu, WeCom, and DingTalk",
 
   // Empty state
-  "empty.title": "OpenAI Agents Starter",
-  "empty.hint": "I'm an OpenAI Agent running on EdgeOne with custom tools and session memory. I can help with weather, clothing advice, translation, and text statistics.",
+  "empty.title": "Agent for IM",
+  "empty.hint": "I'm an OpenAI Agent on EdgeOne Makers. Chat here, or mention me in Slack, Discord, Telegram, Feishu, WeCom, or DingTalk — same tools and session memory.",
   "empty.features": "EdgeOne Store · Session Memory · Agent Tools",
 
   // Chat input
   "chat.placeholder": "Type a message...  ⏎ Send · Shift+⏎ Newline",
-  "chat.hint": "Powered by OpenAI Agents SDK + EdgeOne Makers · Demo only",
+  "chat.hint": "Powered by OpenAI Agents SDK + EdgeOne Makers",
 
   // Preset questions
   "preset.1": "What is the weather like in Beijing now? Any clothing suggestions?",
