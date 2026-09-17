@@ -1,6 +1,6 @@
 # Agent for IM
 
-A multi-platform IM agent on [EdgeOne Makers](https://pages.edgeone.ai/document/agents). One OpenAI Agents SDK runtime answers Slack, Discord, Telegram, Feishu, WeCom, DingTalk, and the web chat UI.
+A multi-platform IM agent on [EdgeOne Makers](https://pages.edgeone.ai/document/agents). One OpenAI Agents SDK runtime answers Slack, Discord, Telegram, Feishu, WeCom, and DingTalk. The web UI is a read-only archive of those conversations.
 
 **Framework:** OpenAI Agents SDK · **Language:** TypeScript
 
@@ -19,6 +19,18 @@ A multi-platform IM agent on [EdgeOne Makers](https://pages.edgeone.ai/document/
 | DingTalk | `POST /dingtalk` | Internal-app robot HTTP callback |
 
 Discord channel messages need `POST /discord-gateway`, or `npm run gateway` locally. Do not run two listeners on one bot token.
+
+## Web inbox
+
+The frontend is a read-only archive, not a live chat box. After each IM turn the agent writes channel metadata, the user message, and the reply to Makers `context.store`. The UI calls:
+
+| Route | Role |
+|-------|------|
+| `POST /inbox` | List threads (filter by platform / DM / keyword) |
+| `POST /history` | Load one transcript |
+| `POST /delete-conversation` | Delete an archived thread |
+
+New conversations appear after this version is deployed. Older IM threads were not indexed for the inbox.
 
 ## Environment variables
 
@@ -117,7 +129,7 @@ cp .env.example .env
 npm run dev:agents
 ```
 
-- Web UI: Vite on the usual local port.
+- Web UI: Vite on the usual local port (read-only inbox for archived IM threads).
 - Agent metrics: `http://localhost:8080/agent-metrics`.
 - Discord Gateway locally (do not run this and `/discord-gateway` at the same time):
 
@@ -137,9 +149,9 @@ agent-for-im/
 ├── cloud-functions/                 # IM webhooks and conversation APIs
 │   ├── slack/ · discord/ · telegram/ · feishu/ · wecom/ · dingtalk/
 │   ├── chat-callback/
-│   ├── history/ · conversations/ · clear-history/ · delete-conversation/
+│   ├── history/ · inbox/ · conversations/ · clear-history/ · delete-conversation/
 │   └── _adapters/                  # One file per vendor
-├── src/                             # React + Vite web chat
+├── src/                             # React + Vite inbox (read-only archive)
 ├── scripts/discord-gateway.mjs
 ├── package.json
 ├── edgeone.json

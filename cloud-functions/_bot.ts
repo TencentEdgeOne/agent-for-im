@@ -40,6 +40,7 @@ import {
   type ChatAdapters,
 } from './_adapters';
 import { callbackSecret, type AgentCallback, type CallbackTarget } from './_callback';
+import { INBOX_USER_ID } from './_inbox';
 import { createLogger } from './_logger';
 
 const logger = createLogger('chat-bot');
@@ -80,10 +81,16 @@ function conversationSeed(platform: string, threadId: string): string {
   return `${platform}-thread:${threadId}`;
 }
 
-function userSeed(platform: string, qualifiedUserId: string): string {
-  if (platform === 'slack') return `slack-user:${qualifiedUserId}`;
-  return `${platform}-user:${qualifiedUserId}`;
-}
+type InboxSourcePayload = {
+  platform: string;
+  channelId?: string;
+  threadId?: string;
+  isDM?: boolean;
+  vendorUserId: string;
+  vendorUserName?: string;
+  channelName?: string;
+  sourceEvent: string;
+};
 
 type AgentRunOptions = {
   origin: string;
@@ -92,14 +99,30 @@ type AgentRunOptions = {
   userId: string;
   conversationId: string;
   callback: AgentCallback;
+  source: InboxSourcePayload;
   signal: AbortSignal;
 };
 
+function pickName(value: unknown, keys: string[]): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const rec = value as Record<string, unknown>;
+  for (const key of keys) {
+    const field = rec[key];
+    if (typeof field === 'string' && field.trim()) return field.trim();
+  }
+  return undefined;
+}
+
+function sourceEventOf(source: string): string {
+  if (source.startsWith('onSlashCommand')) return 'slash';
+  if (source === 'onDirectMessage') return 'dm';
+  return 'mention';
+}
+
 async function postAgent(opts: AgentRunOptions): Promise<void> {
   const conversationId = uuidFromSeed(conversationSeed(opts.platform, opts.conversationId));
-  const userId = uuidFromSeed(userSeed(opts.platform, opts.userId));
   const url = `${opts.origin}/chat`;
-  logger.log(`POST ${url} makers-conversation-id=${conversationId}`);
+  logger.log(`POST ${url} makers-conversation-id=${conversationId} inbox=${INBOX_USER_ID}`);
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -113,8 +136,9 @@ async function postAgent(opts: AgentRunOptions): Promise<void> {
     },
     body: JSON.stringify({
       message: opts.message,
-      userId,
+      userId: INBOX_USER_ID,
       callback: opts.callback,
+      source: opts.source,
     }),
     signal: opts.signal,
   });
@@ -178,6 +202,8 @@ async function respond(opts: {
   platform: string;
   userId: string;
   source: string;
+  vendorUserName?: string;
+  channelName?: string;
   replyUrl?: string;
 }): Promise<void> {
   const origin = requestContext.getStore()?.origin;
@@ -204,6 +230,16 @@ async function respond(opts: {
     userId: `${opts.platform}:${opts.userId}`,
     conversationId,
     callback: { url: `${origin}/chat-callback`, token: secret, target },
+    source: {
+      platform: opts.platform,
+      channelId: opts.surface.channelId,
+      threadId: opts.surface.id,
+      isDM: opts.surface.isDM === true,
+      vendorUserId: opts.userId,
+      vendorUserName: opts.vendorUserName,
+      channelName: opts.channelName,
+      sourceEvent: sourceEventOf(opts.source),
+    },
   });
 }
 
@@ -226,7 +262,11 @@ async function replyToThread(
   const surface = replySurfaceOf(thread.channel, replyInChannel ? undefined : thread.id);
   if (replyInChannel) {
     const raw = message.raw as { channel_id?: string } | undefined;
-    await vendor?.discardUnusedThread?.(env, thread.id, raw?.channel_id);
+    try {
+      await vendor?.discardUnusedThread?.(env, thread.id, raw?.channel_id);
+    } catch (e) {
+      logger.error(`discardUnusedThread failed thread=${thread.id}:`, e);
+    }
   }
 
   await respond({
@@ -236,6 +276,8 @@ async function replyToThread(
     platform,
     userId: message.author.userId,
     source,
+    vendorUserName: pickName(message.author, ['username', 'displayName', 'fullName', 'name', 'realName']),
+    channelName: pickName(thread.channel.toJSON(), ['name', 'displayName', 'title', 'channelName']),
     replyUrl: vendor?.replyUrl?.(message.raw),
   });
 }
@@ -277,6 +319,8 @@ function createBot(env: BotEnv): ChatBot {
       platform: platformFromThreadId(event.channel.id),
       userId: event.user.userId,
       source: `onSlashCommand:${event.command}`,
+      vendorUserName: pickName(event.user, ['username', 'displayName', 'fullName', 'name', 'realName']),
+      channelName: pickName(event.channel.toJSON(), ['name', 'displayName', 'title', 'channelName']),
     });
   });
 

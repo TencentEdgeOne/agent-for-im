@@ -44,4 +44,6 @@ AGENTS.md
 .env
 .edgeone/*
 .tef_dist/*
+
+stitch_agent_im_operations_console
   

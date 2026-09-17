@@ -1,6 +1,6 @@
 # Agent for IM
 
-跑在 [EdgeOne Makers](https://cloud.tencent.com/document/product/1552/132759) 上的多平台 IM Agent。同一套 OpenAI Agents SDK 运行时，同时回答 Slack、Discord、Telegram、飞书、企业微信、钉钉，以及 Web 聊天页。
+跑在 [EdgeOne Makers](https://cloud.tencent.com/document/product/1552/132759) 上的多平台 IM Agent。同一套 OpenAI Agents SDK 运行时，同时回答 Slack、Discord、Telegram、飞书、企业微信、钉钉。Web 页面是这些对话的只读归档。
 
 **Framework：** OpenAI Agents SDK · **Language：** TypeScript
 
@@ -19,6 +19,18 @@
 | 钉钉 | `POST /dingtalk` | 企业内部应用机器人 HTTP 回调 |
 
 Discord 频道消息需要启动 `POST /discord-gateway`，或本地跑 `npm run gateway`。同一个 bot token 不要同时开两个 listener。
+
+## Web 归档台
+
+前端是只读的多渠道会话归档，不再提供网页试聊。每次 IM 对话结束后，Agent 会把渠道、用户原文和回复写入 Makers `context.store`。页面通过这些接口查看：
+
+| 路由 | 作用 |
+|------|------|
+| `POST /inbox` | 列出会话（可按渠道 / 私聊 / 关键词筛选） |
+| `POST /history` | 拉取一条会话的完整来回 |
+| `POST /delete-conversation` | 删除归档会话 |
+
+只有本版本上线之后的新对话会出现在列表里。更早的 IM 记录没有 inbox 索引。
 
 ## 环境变量
 
@@ -117,7 +129,7 @@ cp .env.example .env
 npm run dev:agents
 ```
 
-- Web 聊天页：Vite 默认本地端口。
+- Web 归档台：Vite 默认本地端口。
 - Agent 观测：`http://localhost:8080/agent-metrics`。
 - 本地 Discord Gateway（不要和 `/discord-gateway` 同时跑）：
 
@@ -137,9 +149,9 @@ agent-for-im/
 ├── cloud-functions/                 # IM webhook 和会话接口
 │   ├── slack/ · discord/ · telegram/ · feishu/ · wecom/ · dingtalk/
 │   ├── chat-callback/
-│   ├── history/ · conversations/ · clear-history/ · delete-conversation/
+│   ├── history/ · inbox/ · conversations/ · clear-history/ · delete-conversation/
 │   └── _adapters/                  # 每个平台一个文件
-├── src/                             # React + Vite Web 聊天
+├── src/                             # React + Vite 归档台（只读）
 ├── scripts/discord-gateway.mjs
 ├── package.json
 ├── edgeone.json

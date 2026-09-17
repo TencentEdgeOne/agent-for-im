@@ -1,607 +1,319 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import type {
-  Message,
-  ToolLampState,
-  ConversationSummary,
-} from './types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ConversationDetail, InboxConversation, InboxMessage } from './types';
+import { PLATFORMS } from './types';
+import { deleteConversation, fetchHistory, fetchInbox } from './api';
+import { I18nProvider, useT, type MessageKeys } from './i18n';
 import {
-  fetchConversationHistory,
-  sendMessageStream,
-  stopAgent,
-  listConversations,
-  deleteConversation,
-} from './api';
-import type { RawSseEvent } from './api';
-import ToolIndicators from './components/ToolIndicators';
-import ChatWindow from './components/ChatWindow';
-import ChatInput from './components/ChatInput';
-import DebugPanel from './components/DebugPanel';
-import CodeViewer from './components/CodeViewer';
-import ConversationSidebar from './components/ConversationSidebar';
+  conversationPermalink,
+  copyText,
+  downloadFile,
+  parseHashConversationId,
+} from './lib/format';
+import ConversationList from './components/ConversationList';
+import Transcript, { CopyToast } from './components/Transcript';
+import Inspector from './components/Inspector';
 import GitHubLink from './components/GitHubLink';
 import DeployLink from './components/DeployLink';
-import { I18nProvider, LangToggle, useT, MessageKeys } from './i18n';
-import { deleteSnapshot, loadSnapshot, saveSnapshot } from './lib/chatUiStore';
 import styles from './App.module.css';
 
-const LAMP_IDS = ['get_weather', 'get_clothing_advice', 'translate_text', 'text_statistics'] as const;
-const LAMP_ICONS: Record<string, string> = {
-  get_weather: '☀️',
-  get_clothing_advice: '👔',
-  translate_text: '🌐',
-  text_statistics: '📊',
+const PAGE_SIZE = 20;
+
+const PLATFORM_I18N: Record<string, MessageKeys> = {
+  all: 'platform.all',
+  slack: 'platform.slack',
+  discord: 'platform.discord',
+  telegram: 'platform.telegram',
+  feishu: 'platform.feishu',
+  wecom: 'platform.wecom',
+  dingtalk: 'platform.dingtalk',
 };
-const LAMP_I18N_KEYS: Record<string, string> = {
-  get_weather: 'tool.weather',
-  get_clothing_advice: 'tool.clothing',
-  translate_text: 'tool.translate',
-  text_statistics: 'tool.statistics',
-};
-
-const CONVERSATION_ID_STORAGE_KEY = 'eo_conversation_id';
-
-/**
- * eo-uuid: stable per-browser identifier. Generated client-side on first
- * visit and persisted in localStorage. Used as the `userId` argument to all
- * memory-store calls so that listConversations / clear / delete can scope
- * results to "this browser's conversations only". Cross-template aware:
- * intentionally shares the same localStorage key with claude-agent-starter
- * so the same browser sees the same identity in either template.
- */
-const EO_USER_ID_STORAGE_KEY = 'eo-uuid';
-const CONVERSATIONS_PAGE_SIZE = 20;
-
-/** Returns existing conversation ID from localStorage, or null if first visit */
-function getExistingConversationId(): string | null {
-  return localStorage.getItem(CONVERSATION_ID_STORAGE_KEY);
-}
-
-/** Returns existing or creates a new conversation ID */
-function getOrCreateConversationId(): string {
-  const cached = getExistingConversationId();
-  if (cached) return cached;
-
-  const conversationId = crypto.randomUUID();
-  localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, conversationId);
-  return conversationId;
-}
-
-function getOrCreateEoUuid(): string {
-  const cached = localStorage.getItem(EO_USER_ID_STORAGE_KEY);
-  if (cached) return cached;
-  const eoUuid = crypto.randomUUID();
-  localStorage.setItem(EO_USER_ID_STORAGE_KEY, eoUuid);
-  return eoUuid;
-}
-
-// Module-level dedup flag — outside React lifecycle, unaffected by StrictMode
-let _historyFetchInFlight = false;
 
 export default function App() {
   return (
     <I18nProvider>
-      <LangToggle />
       <AppInner />
     </I18nProvider>
   );
 }
 
 function AppInner() {
-  const { t } = useT();
-  const buildLamps = useCallback((): ToolLampState[] =>
-    LAMP_IDS.map(id => ({
-      id,
-      label: t(LAMP_I18N_KEYS[id] as MessageKeys),
-      icon: LAMP_ICONS[id],
-      active: false,
-      animKey: 0,
-    })),
-  [t]);
+  const { t, lang, setLang } = useT();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [platform, setPlatform] = useState('all');
+  const [dmOnly, setDmOnly] = useState(false);
+  const [conversations, setConversations] = useState<InboxConversation[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | undefined>();
+  const [stats, setStats] = useState({ total: 0, byPlatform: {} as Record<string, number> });
+  const [configured, setConfigured] = useState<Record<string, boolean>>({});
+  const [listLoading, setListLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(parseHashConversationId);
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [detail, setDetail] = useState<ConversationDetail | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [mobileView, setMobileView] = useState<'list' | 'thread'>('list');
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [lamps, setLamps]       = useState<ToolLampState[]>(buildLamps);
-  const [loading, setLoading]   = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  const [debugEvents, setDebugEvents] = useState<RawSseEvent[]>([]);
-  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'debug'>('code');
-
-  // Conversation list (sidebar) state
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [conversationsLoading, setConversationsLoading] = useState(true);
-  const [conversationsLoadingMore, setConversationsLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
-  const [activeConversationId, setActiveConversationId] = useState<string>(() => getOrCreateConversationId());
-
-  const botMsgIdRef = useRef<string>('');
-  const abortCtrlRef = useRef<AbortController | null>(null);
-  const hadExistingConversationIdRef = useRef(getExistingConversationId() !== null);
-  const conversationIdRef = useRef<string>(activeConversationId);
-  const eoUuidRef = useRef<string>(getOrCreateEoUuid());
-  const initDoneRef = useRef(false);
-  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Keep conversationIdRef in sync with the activeConversationId state.
   useEffect(() => {
-    conversationIdRef.current = activeConversationId;
-  }, [activeConversationId]);
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 280);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
-  // Update lamp labels when language changes
-  useEffect(() => {
-    setLamps(prev =>
-      prev.map(l => ({
-        ...l,
-        label: t(LAMP_I18N_KEYS[l.id] as MessageKeys),
-      }))
-    );
-  }, [t]);
-
-  // Persist a UI snapshot of the current conversation's messages to IndexedDB
-  // (debounced) so a refresh restores instantly without hitting /history.
-  useEffect(() => {
-    if (messages.length === 0) return;
-    if (!initDoneRef.current) return;
-
-    if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
-    snapshotTimerRef.current = setTimeout(() => {
-      saveSnapshot(conversationIdRef.current, messages).catch(err => {
-        console.warn('[chatUiStore] snapshot save failed:', err);
-      });
-    }, 500);
-
-    return () => {
-      if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
-    };
-  }, [messages]);
-
-  /** Load full message list for a conversation: snapshot first, then /history reconciliation. */
-  const loadConversation = useCallback(async (convId: string) => {
-    setHistoryLoading(true);
-    let restoredFromSnapshot = false;
-    let snapshotMessageCount = 0;
-
+  const loadList = useCallback(async (mode: 'replace' | 'append', cursor?: string) => {
+    if (mode === 'append') setLoadingMore(true);
+    else setListLoading(true);
     try {
-      const snapshot = await loadSnapshot(convId).catch(() => [] as Message[]);
-      snapshotMessageCount = snapshot.length;
-      if (snapshot.length > 0) {
-        restoredFromSnapshot = true;
-        setMessages(snapshot);
-        setHistoryLoading(false);
-      }
-
-      const history = await fetchConversationHistory(convId, eoUuidRef.current);
-      if (history.length > 0) {
-        if (!restoredFromSnapshot || history.length > snapshotMessageCount) {
-          setMessages(history);
-        }
-        saveSnapshot(convId, history).catch(() => {});
-      } else if (!restoredFromSnapshot) {
-        setMessages([]);
-      }
-    } finally {
-      setHistoryLoading(false);
-      initDoneRef.current = true;
-    }
-  }, []);
-
-  /** Refresh sidebar conversations list. mode='replace' → reload from start; 'append' → add next page. */
-  const refreshConversations = useCallback(async (mode: 'replace' | 'append', cursor?: string) => {
-    if (mode === 'append') {
-      setConversationsLoadingMore(true);
-    } else {
-      setConversationsLoading(true);
-    }
-    try {
-      const res = await listConversations({
-        userId: eoUuidRef.current,
-        limit: CONVERSATIONS_PAGE_SIZE,
-        order: 'desc',
+      const res = await fetchInbox({
+        platform: platform === 'all' ? undefined : platform,
+        q: debouncedQuery || undefined,
+        isDM: dmOnly || undefined,
+        limit: PAGE_SIZE,
         after: cursor,
       });
-
+      setStats(res.stats);
+      setConfigured(res.platformsConfigured);
       setNextCursor(res.nextCursor);
-
+      setUpdatedAt(Date.now());
       if (mode === 'append') {
-        setConversations(prev => {
-          const seen = new Set(prev.map(c => c.id));
-          const merged = [...prev];
-          for (const c of res.conversations) {
-            if (!seen.has(c.id)) merged.push(c);
-          }
-          return merged;
+        setConversations((prev) => {
+          const seen = new Set(prev.map((c) => c.id));
+          return [...prev, ...res.conversations.filter((c) => !seen.has(c.id))];
         });
       } else {
         setConversations(res.conversations);
       }
     } finally {
-      if (mode === 'append') {
-        setConversationsLoadingMore(false);
-      } else {
-        setConversationsLoading(false);
-      }
+      setListLoading(false);
+      setLoadingMore(false);
+    }
+  }, [platform, debouncedQuery, dmOnly]);
+
+  const conversationsRef = useRef<InboxConversation[]>([]);
+  conversationsRef.current = conversations;
+
+  const loadThread = useCallback(async (id: string) => {
+    setHistoryLoading(true);
+    try {
+      const res = await fetchHistory(id);
+      setMessages(res.messages);
+      const summary = conversationsRef.current.find((c) => c.id === id);
+      setDetail({
+        ...(summary || { id, title: '', platform: 'im' }),
+        ...res.conversation,
+        id,
+      });
+    } finally {
+      setHistoryLoading(false);
     }
   }, []);
 
-  // Initial load: history (only if previously visited) + conversations list
   useEffect(() => {
-    if (_historyFetchInFlight) {
-      void refreshConversations('replace');
-      return;
-    }
-    _historyFetchInFlight = true;
+    void loadList('replace');
+  }, [loadList]);
 
-    if (!hadExistingConversationIdRef.current) {
-      // First visit: skip /history fetch (would be empty). Still kick off the
-      // conversations list so the sidebar shows the user's other browsers'
-      // conversations if any (rare but possible).
-      setHistoryLoading(false);
-      initDoneRef.current = true;
-      void refreshConversations('replace').finally(() => {
-        _historyFetchInFlight = false;
-      });
-      return;
-    }
-
-    void loadConversation(conversationIdRef.current).finally(() => {
-      void refreshConversations('replace').finally(() => {
-        _historyFetchInFlight = false;
-      });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /** Update the current bot message's content via an updater function. */
-  const updateBotMessage = useCallback((updater: (content: string) => string) => {
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === botMsgIdRef.current
-          ? { ...m, content: updater(m.content) }
-          : m
-      )
-    );
-  }, []);
-
-  /** Clear the assistant message's `streaming` flag (hides the blinking caret). */
-  const clearBotStreaming = useCallback(() => {
-    setMessages(prev => {
-      let changed = false;
-      const next = prev.map(m => {
-        if (m.id === botMsgIdRef.current && m.streaming) {
-          changed = true;
-          const { streaming, ...rest } = m;
-          return rest;
-        }
-        return m;
-      });
-      return changed ? next : prev;
-    });
-  }, []);
-
-  const finishStream = useCallback(() => {
-    setLoading(false);
-    abortCtrlRef.current = null;
-  }, []);
-
-  const handleSend = useCallback(async (text: string) => {
-    initDoneRef.current = true;
-    setRightPanelMode('debug');
-
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    };
-
-    const botMsgId = crypto.randomUUID();
-    botMsgIdRef.current = botMsgId;
-    const botMsg: Message = {
-      id: botMsgId,
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now(),
-      streaming: true,
-    };
-
-    setMessages(prev => [...prev, userMsg, botMsg]);
-    setLoading(true);
-
-    /**
-     * Optimistic sidebar update — fires as soon as the backend emits its first
-     * SSE event (matches ChatGPT's "new chat appears the moment streaming
-     * starts" UX). For brand-new conversations we prepend a synthesized summary;
-     * for existing ones we just bump them to the top.
-     *
-     * Server reconciliation still happens in onDone() via refreshConversations,
-     * which can correct the title if the runtime later overrides it.
-     */
-    let sidebarPrimed = false;
-    const cleanedText = text.replace(/\s+/g, ' ').trim();
-    const optimisticTitle =
-      cleanedText.length === 0 ? 'New chat'
-        : cleanedText.length <= 8 ? cleanedText
-          : `${cleanedText.slice(0, 8)}...`;
-
-    const primeSidebar = () => {
-      if (sidebarPrimed) return;
-      sidebarPrimed = true;
-
-      const convId = conversationIdRef.current;
-      const now = Date.now();
-
-      setConversations(prev => {
-        const idx = prev.findIndex(c => c.id === convId);
-        if (idx === -1) {
-          const summary: ConversationSummary = {
-            id: convId,
-            title: optimisticTitle,
-            lastMessageAt: now,
-            userId: eoUuidRef.current,
-          };
-          return [summary, ...prev];
-        }
-        const next = [...prev];
-        const [moved] = next.splice(idx, 1);
-        next.unshift({ ...moved, lastMessageAt: now });
-        return next;
-      });
-    };
-
-    const ctrl = sendMessageStream(text, {
-      onTextDelta(delta) {
-        updateBotMessage(content => content + delta);
-      },
-
-      onToolCalled(toolName) {
-        setLamps(prev =>
-          prev.map(l =>
-            l.id === toolName
-              ? { ...l, active: true, animKey: l.animKey + 1 }
-              : l
-          )
-        );
-        setTimeout(() => {
-          setLamps(prev =>
-            prev.map(l => (l.id === toolName ? { ...l, active: false } : l))
-          );
-        }, 1000);
-      },
-
-      onRawEvent(event) {
-        // Every backend SSE frame flows through here, so this is the cheapest
-        // hook for "first byte from backend".
-        primeSidebar();
-
-        // Coalesce consecutive text_delta events into a single growing entry,
-        // so a multi-paragraph response doesn't flood the debug panel with
-        // hundreds of one-token rows.
-        if (event.eventType === 'text_delta') {
-          const delta = (event.data as { delta?: string } | null)?.delta ?? '';
-          setRightPanelMode('debug');
-          setDebugEvents(prev => {
-            const last = prev[prev.length - 1];
-            if (last && last.eventType === 'text_delta') {
-              const prevDelta = (last.data as { delta?: string } | null)?.delta ?? '';
-              const merged: RawSseEvent = {
-                ...last,
-                data: { delta: prevDelta + delta },
-                raw: last.raw + delta,
-                timestamp: event.timestamp,
-              };
-              return [...prev.slice(0, -1), merged];
-            }
-            return [...prev, event];
-          });
-          return;
-        }
-        setRightPanelMode('debug');
-        setDebugEvents(prev => [...prev, event]);
-      },
-
-      onDone() {
-        clearBotStreaming();
-        finishStream();
-        // Reconcile with backend so the title (and any other fields the runtime
-        // synthesized) reflect the server's authoritative state.
-        void refreshConversations('replace');
-      },
-
-      onError() {
-        clearBotStreaming();
-        updateBotMessage(content => content || t("status.error"));
-        finishStream();
-      },
-    }, conversationIdRef.current, {
-      userId: eoUuidRef.current,
-      userMsgId: userMsg.id,
-      botMsgId,
-    });
-
-    abortCtrlRef.current = ctrl;
-  }, [updateBotMessage, clearBotStreaming, finishStream, refreshConversations, t]);
-
-  const handleClearHistory = useCallback(() => {
-    const oldConvId = conversationIdRef.current;
-
-    if (abortCtrlRef.current) {
-      abortCtrlRef.current.abort();
-      abortCtrlRef.current = null;
-    }
-
-    // The trash button in ChatInput is the same affordance as the trash
-    // icon on a sidebar item: it should DELETE the conversation entirely,
-    // not just clear its messages. Using `clearMessages` here would leave
-    // the old conversation in the sidebar with an empty body and a
-    // fallback "New chat" title — confusing for users who clicked trash
-    // expecting "make this thread go away".
-    //
-    // Optimistically drop from the sidebar so the user sees the row
-    // disappear immediately; the network call is fire-and-forget.
-    setConversations(prev => prev.filter(c => c.id !== oldConvId));
-
-    deleteConversation(oldConvId, eoUuidRef.current).then(ok => {
-      if (!ok) {
-        console.warn('[delete-conversation] backend request failed');
-      }
-    }).finally(() => {
-      // Reconcile with backend in case the server-side delete succeeded
-      // for a different reason than expected (e.g. it was already gone).
-      void refreshConversations('replace');
-    });
-
-    deleteSnapshot(oldConvId).catch(() => {});
-
-    const newId = crypto.randomUUID();
-    localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, newId);
-    conversationIdRef.current = newId;
-    setActiveConversationId(newId);
-    setMessages([]);
-    setDebugEvents([]);
-    setRightPanelMode('code');
-    setLoading(false);
-    initDoneRef.current = false;
-  }, [refreshConversations]);
-
-  const handleStop = useCallback(() => {
-    // 1. Immediately abort frontend SSE read
-    if (abortCtrlRef.current) {
-      abortCtrlRef.current.abort();
-      abortCtrlRef.current = null;
-    }
-
-    // 2. Optimistic UI: show stopped immediately without waiting for backend
-    updateBotMessage(content => content ? content + '\n\n' + t("status.stopped") : t("status.stopped"));
-    setLoading(false);
-
-    // 3. Backend abort async — notify user on failure
-    stopAgent(conversationIdRef.current).then(ok => {
-      if (!ok) {
-        updateBotMessage(content => content + '\n\n' + t("status.backendError"));
-      }
-    });
-  }, [updateBotMessage, t]);
-
-  /** User clicked a conversation in the sidebar. */
-  const handleSelectConversation = useCallback((id: string) => {
-    if (loading) return;
-    if (id === conversationIdRef.current) return;
-
-    localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, id);
-    conversationIdRef.current = id;
-    setActiveConversationId(id);
-    setRightPanelMode('code');
-    void loadConversation(id);
-  }, [loading, loadConversation]);
-
-  /** User clicked "New chat" in the sidebar. */
-  const handleCreateConversation = useCallback(() => {
-    if (loading) return;
-
-    const newId = crypto.randomUUID();
-    localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, newId);
-    conversationIdRef.current = newId;
-    setActiveConversationId(newId);
-    setMessages([]);
-    setDebugEvents([]);
-    setRightPanelMode('code');
-    initDoneRef.current = false;
-    setHistoryLoading(false);
-  }, [loading]);
-
-  const handleLoadMoreConversations = useCallback(() => {
-    if (!nextCursor || conversationsLoadingMore) return;
-    void refreshConversations('append', nextCursor);
-  }, [nextCursor, conversationsLoadingMore, refreshConversations]);
-
-  /**
-   * User clicked the trash icon on a sidebar item.
-   *
-   * Optimistic delete: immediately remove the item from local UI state and
-   * fire-and-forget the backend request. We don't await or block the user —
-   * if the network call fails, we log it but don't roll back, since reloading
-   * the page will reconcile via /conversations anyway.
-   */
-  const handleDeleteConversation = useCallback((id: string) => {
-    if (loading) return;
-    if (!id) return;
-
-    const confirmed = window.confirm(t('sidebar.deleteConfirm'));
-    if (!confirmed) return;
-
-    const isActive = id === conversationIdRef.current;
-
-    setConversations(prev => prev.filter(c => c.id !== id));
-
-    if (isActive) {
-      const newId = crypto.randomUUID();
-      localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, newId);
-      conversationIdRef.current = newId;
-      setActiveConversationId(newId);
+  useEffect(() => {
+    if (!activeId) {
       setMessages([]);
-      setDebugEvents([]);
-      setRightPanelMode('code');
-      initDoneRef.current = false;
-      setHistoryLoading(false);
+      setDetail(null);
+      return;
     }
+    void loadThread(activeId);
+  }, [activeId, loadThread]);
 
-    void deleteSnapshot(id).catch(() => {});
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadList('replace');
+      if (activeId) await loadThread(activeId);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [activeId, loadList, loadThread]);
 
-    void deleteConversation(id, eoUuidRef.current).catch(e => {
-      console.warn('[delete-conversation] backend request failed:', e);
-    });
-  }, [loading, t]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (event.key === 'Escape') {
+        setActiveId(null);
+        window.location.hash = '';
+        setMobileView('list');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
-  const sidebarHasMore = useMemo(() => Boolean(nextCursor), [nextCursor]);
+  useEffect(() => {
+    const onHash = () => setActiveId(parseHashConversationId());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const selectConversation = (id: string) => {
+    setActiveId(id);
+    window.location.hash = `#/c/${id}`;
+    setMobileView('thread');
+  };
+
+  const flashCopied = async (text: string) => {
+    const ok = await copyText(text);
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
+  const handleCopyLink = () => {
+    if (!activeId) return;
+    void flashCopied(conversationPermalink(activeId));
+  };
+
+  const exportMarkdown = () => {
+    if (!activeId) return;
+    const lines = [
+      `# ${detail?.title || activeId}`,
+      '',
+      `- platform: ${detail?.platform ?? ''}`,
+      `- channel: ${detail?.channelId ?? ''}`,
+      `- thread: ${detail?.threadId ?? ''}`,
+      '',
+      ...messages.map((m) => `**${m.role}** (${new Date(m.timestamp).toISOString()})\n\n${m.content}\n`),
+    ];
+    downloadFile(`${activeId}.md`, lines.join('\n'), 'text/markdown');
+  };
+
+  const exportJson = () => {
+    if (!activeId) return;
+    downloadFile(
+      `${activeId}.json`,
+      JSON.stringify({ conversation: detail, messages }, null, 2),
+      'application/json',
+    );
+  };
+
+  const handleDelete = async () => {
+    if (!activeId) return;
+    if (!window.confirm(t('inspector.deleteConfirm'))) return;
+    await deleteConversation(activeId);
+    setConversations((prev) => prev.filter((c) => c.id !== activeId));
+    setActiveId(null);
+    window.location.hash = '';
+    setMobileView('list');
+    void loadList('replace');
+  };
+
+  const updatedLabel = updatedAt
+    ? `${t('header.lastRefresh')} ${new Date(updatedAt).toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })}`
+    : t('header.notLoaded');
+
+  const userCount = useMemo(() => messages.filter((m) => m.role === 'user').length, [messages]);
+  const assistantCount = useMemo(() => messages.filter((m) => m.role === 'assistant').length, [messages]);
+  const pending = Boolean(detail?.pending || (messages.length > 0 && messages[messages.length - 1]?.role === 'user'));
+
+  const chips = [
+    { id: 'all', count: stats.total },
+    ...PLATFORMS.map((id) => ({ id, count: stats.byPlatform[id] ?? 0 })),
+  ];
 
   return (
     <div className={styles.shell}>
       <div className={styles.blob1} />
       <div className={styles.blob2} />
-
       <div className={styles.stage}>
-        <ConversationSidebar
-          conversations={conversations}
-          activeConversationId={activeConversationId}
-          loading={conversationsLoading}
-          loadingMore={conversationsLoadingMore}
-          hasMore={sidebarHasMore}
-          disabled={loading}
-          onSelect={handleSelectConversation}
-          onCreate={handleCreateConversation}
-          onLoadMore={handleLoadMoreConversations}
-          onDelete={handleDeleteConversation}
-        />
-
-        <div className={styles.chatPanel}>
-          <header className={styles.header}>
-            <div className={styles.headerLeft}>
-              <span className={styles.logo}>⬡</span>
-              <div>
-                <p className={styles.title}>{t("app.title")}</p>
-                <p className={styles.subtitle}>{t("app.subtitle")}</p>
-              </div>
-            </div>
-            <ToolIndicators lamps={lamps} />
-          </header>
-
-          <div className={styles.chatWindowShell}>
-            <ChatWindow messages={messages} loading={loading} />
-            {historyLoading && messages.length === 0 && (
-              <div className={styles.historyOverlay}>
-                <div className={styles.historySpinner} />
-              </div>
-            )}
+      <header className={styles.topbar}>
+        <div className={styles.brand}>
+          <span className={styles.logo}>⬡</span>
+          <strong>{t('app.title')}</strong>
+          <span className={styles.subtitle}>{t('app.subtitle')}</span>
+        </div>
+        <div className={styles.searchWrap}>
+          <span className={styles.searchIcon}>⌕</span>
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('search.placeholder')}
+          />
+          <kbd>{t('search.hotkey')}</kbd>
+        </div>
+        <div className={styles.topRight}>
+          <span className={styles.updated}>{updatedLabel}</span>
+          <button
+            type="button"
+            className={styles.refreshBtn}
+            onClick={() => void handleRefresh()}
+            disabled={refreshing || listLoading}
+          >
+            <span className={refreshing ? styles.spin : undefined} aria-hidden>↻</span>
+            {t('header.refresh')}
+          </button>
+          <div className={styles.lang}>
+            <button type="button" className={lang === 'zh' ? styles.langOn : ''} onClick={() => setLang('zh')}>{t('lang.zh')}</button>
+            <button type="button" className={lang === 'en' ? styles.langOn : ''} onClick={() => setLang('en')}>{t('lang.en')}</button>
           </div>
-          <ChatInput onSend={handleSend} onStop={handleStop} onClear={handleClearHistory} disabled={loading} />
         </div>
+      </header>
 
-        <div className={styles.codePanel}>
-          {rightPanelMode === 'code' ? (
-            <CodeViewer />
-          ) : (
-            <DebugPanel events={debugEvents} onClear={() => setDebugEvents([])} />
-          )}
-        </div>
+      <nav className={styles.chips}>
+        {chips.map((chip) => (
+          <button
+            key={chip.id}
+            type="button"
+            className={platform === chip.id ? styles.chipOn : styles.chip}
+            onClick={() => setPlatform(chip.id)}
+          >
+            {t(PLATFORM_I18N[chip.id])}
+            <em>{chip.count}</em>
+          </button>
+        ))}
+      </nav>
+
+      <div className={`${styles.workspace} ${activeId && mobileView === 'thread' ? styles.threadMode : ''}`}>
+        <ConversationList
+          conversations={conversations}
+          activeId={activeId}
+          loading={listLoading}
+          loadingMore={loadingMore}
+          hasMore={Boolean(nextCursor)}
+          total={stats.total}
+          dmOnly={dmOnly}
+          onToggleDm={() => setDmOnly((v) => !v)}
+          onSelect={selectConversation}
+          onLoadMore={() => void loadList('append', nextCursor)}
+        />
+        <Transcript
+          conversation={detail}
+          messages={messages}
+          loading={historyLoading}
+          platformsConfigured={configured}
+          onCopyLink={handleCopyLink}
+          onExport={exportMarkdown}
+        />
+        <Inspector
+          conversation={detail}
+          messageCount={messages.length}
+          userCount={detail?.userCount ?? userCount}
+          assistantCount={detail?.assistantCount ?? assistantCount}
+          pending={pending}
+          onCopyLink={handleCopyLink}
+          onExportMd={exportMarkdown}
+          onExportJson={exportJson}
+          onDelete={() => void handleDelete()}
+        />
       </div>
+      </div>
+      <CopyToast visible={copied} text={t('stage.copied')} />
       <GitHubLink />
       <DeployLink />
     </div>

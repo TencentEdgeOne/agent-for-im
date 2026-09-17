@@ -10,8 +10,8 @@
  * message index, conversation metadata and the global conversation index —
  * irreversible.
  *
- * Requires `user_id` (or `userId`) so we don't accidentally delete a
- * conversation that doesn't belong to the requesting browser.
+ * Inbox deletes by `conversation_id`. Optional `user_id` is still passed
+ * through when present so the user index can be cleaned up.
  *
  * Following the official EdgeOne Makers Node Functions docs:
  *   - export `onRequestPost` for POST handlers

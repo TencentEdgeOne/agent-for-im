@@ -4,29 +4,23 @@
  *
  * File path cloud-functions/history/index.ts maps to **POST /history**.
  *
- * Reads conversation history from `context.agent!.store.getMessages()` and
- * returns it to the frontend for restoring the chat window after a page
- * refresh.
- *
- * The chat handler writes a user-index copy for the sidebar, while the
- * OpenAI Agents SDK session writes the same user input for model memory.
- * This handler normalizes SDK records, merges same-run assistant fragments,
- * and folds adjacent duplicate bubbles so refresh rehydrates one visible
- * user message per turn.
- *
- * Following the official EdgeOne Makers Node Functions docs:
- *   - export `onRequestPost` for POST handlers
- *   - read JSON body via `await context.request!.json()`
- *   - return a `Response` object
- *   https://pages.edgeone.ai/document/node-functions
+ * Prefers inbox-tagged turns (channel + user + agent reply). Falls back to
+ * OpenAI session records for older conversations, merging fragments and
+ * dropping adjacent duplicates.
  */
 
 import type { CloudFunctionContext } from '@edgeone/types';
+import {
+  asRecord,
+  jsonResponse,
+  pickString,
+  readJsonBody,
+  sourceFromMeta,
+  type InboxSource,
+} from '../_inbox';
 import { createLogger } from '../_logger';
 
 const logger = createLogger('history');
-
-const JSON_HEADERS = { 'Content-Type': 'application/json; charset=UTF-8' } as const;
 
 interface MemoryMessage {
   messageId?: string;
@@ -36,38 +30,23 @@ interface MemoryMessage {
   metadata?: Record<string, unknown>;
 }
 
-interface FrontendMessage {
+interface FrontendMessage extends InboxSource {
   id: string;
   role: string;
   content: string;
   timestamp: number;
+  error?: boolean;
 }
 
 interface NormalizedMessage {
   message: FrontendMessage;
   runId?: string;
-}
-
-function jsonResponse(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
-}
-
-async function readJsonBody(context: CloudFunctionContext): Promise<Record<string, unknown>> {
-  try {
-    const data = await context.request!.json();
-    return data && typeof data === 'object' && !Array.isArray(data)
-      ? (data as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
+  inbox?: boolean;
 }
 
 function getConversationId(context: CloudFunctionContext, body: Record<string, unknown>): string {
-  const fromBody = body.conversation_id ?? body.conversationId;
-  if (typeof fromBody === 'string' && fromBody.trim()) return fromBody.trim();
-
-  // Backwards-compat: also accept the makers-conversation-id header used by /chat.
+  const fromBody = pickString(body.conversation_id, body.conversationId);
+  if (fromBody) return fromBody;
   try {
     const headerValue = context?.request?.headers?.get?.('makers-conversation-id');
     if (typeof headerValue === 'string' && headerValue.trim()) return headerValue.trim();
@@ -77,13 +56,11 @@ function getConversationId(context: CloudFunctionContext, body: Record<string, u
   return '';
 }
 
-// ── Content extraction ──────────────────────────────────────
-
 function contentToText(content: unknown): string {
   if (typeof content === 'string') return content;
 
   if (content !== null && typeof content === 'object' && !Array.isArray(content)) {
-    const obj = content as Record<string, unknown>;
+    const obj = asRecord(content);
     if ('content' in obj) return contentToText(obj.content);
     if ('output' in obj) return contentToText(obj.output);
     if ('text' in obj) return String(obj.text ?? '');
@@ -100,7 +77,7 @@ function contentToText(content: unknown): string {
       .join('\n');
   }
 
-  return String(content);
+  return String(content ?? '');
 }
 
 function normalizeMessage(item: MemoryMessage): NormalizedMessage | null {
@@ -116,20 +93,23 @@ function normalizeMessage(item: MemoryMessage): NormalizedMessage | null {
   const content = contentToText(item.content);
   if (!content) return null;
 
+  const source = sourceFromMeta(meta);
   return {
     message: {
       id: item.messageId ?? `${role}-${item.createdAt ?? 0}`,
       role,
       content,
       timestamp: item.createdAt ?? 0,
+      error: meta.error === true,
+      ...source,
     },
     runId: meta.run_id as string | undefined,
+    inbox: meta.inbox === true,
   };
 }
 
 function mergeAssistantFragments(items: NormalizedMessage[]): FrontendMessage[] {
   const sorted = [...items].sort((a, b) => a.message.timestamp - b.message.timestamp);
-
   const merged: FrontendMessage[] = [];
   let lastRunId: string | undefined;
 
@@ -156,7 +136,6 @@ function mergeAssistantFragments(items: NormalizedMessage[]): FrontendMessage[] 
 
 function dedupeAdjacent(messages: FrontendMessage[]): FrontendMessage[] {
   const deduped: FrontendMessage[] = [];
-
   for (const message of messages) {
     const previous = deduped[deduped.length - 1];
     if (
@@ -168,57 +147,93 @@ function dedupeAdjacent(messages: FrontendMessage[]): FrontendMessage[] {
     }
     deduped.push(message);
   }
-
   return deduped;
 }
 
-// ── Handler ─────────────────────────────────────────────────
+async function loadAllMessages(
+  store: { getMessages: (args: Record<string, unknown>) => Promise<MemoryMessage[]> },
+  conversationId: string,
+): Promise<MemoryMessage[]> {
+  const all: MemoryMessage[] = [];
+  let after: string | undefined;
+  for (let page = 0; page < 10; page += 1) {
+    const history = await store.getMessages({
+      conversationId,
+      limit: 100,
+      order: 'asc',
+      ...(after ? { after } : {}),
+    });
+    if (!Array.isArray(history) || history.length === 0) break;
+    all.push(...history);
+    if (history.length < 100) break;
+    after = history[history.length - 1]?.messageId;
+    if (!after) break;
+  }
+  return all;
+}
+
+function conversationSummary(
+  raw: unknown,
+  messages: FrontendMessage[],
+): Record<string, unknown> {
+  const rec = asRecord(raw);
+  const meta = sourceFromMeta(asRecord(rec.metadata));
+  const userCount = messages.filter(m => m.role === 'user').length;
+  const assistantCount = messages.filter(m => m.role === 'assistant').length;
+  const last = messages[messages.length - 1];
+  const pending = Boolean(last && last.role === 'user');
+  return {
+    id: pickString(rec.conversationId, rec.conversation_id, rec.id),
+    createdAt: rec.createdAt,
+    lastMessageAt: rec.lastMessageAt,
+    messageCount: messages.length || rec.messageCount,
+    userCount,
+    assistantCount,
+    pending,
+    model: meta.model || messages.find(m => m.model)?.model,
+    ...meta,
+  };
+}
 
 export async function onRequestPost(context: CloudFunctionContext): Promise<Response> {
   const requestStartTime = Date.now();
   logger.log(`[history] start: ${new Date(requestStartTime).toISOString()}`);
 
-  const body = await readJsonBody(context);
+  const body = await readJsonBody(context.request);
   const conversationId = getConversationId(context, body);
   const { store } = context.agent!;
 
   logger.log('conversationId:', conversationId || '-');
 
   if (!conversationId) {
-    logger.log(
-      `[history] end: ${new Date().toISOString()}, total: ${Date.now() - requestStartTime}ms (no conversationId)`,
-    );
-    return jsonResponse({ conversation_id: conversationId, messages: [] });
+    return jsonResponse({ conversation_id: conversationId, messages: [], conversation: null });
   }
 
   try {
-    const storeStartTime = Date.now();
-    logger.log(`[history] store.getMessages start: ${new Date(storeStartTime).toISOString()}`);
-
-    const history: MemoryMessage[] = await store.getMessages({
-      conversationId,
-      limit: 100,
-      order: 'asc',
-    });
-
-    const storeEndTime = Date.now();
-    logger.log(
-      `[history] store.getMessages end: ${new Date(storeEndTime).toISOString()}, duration: ${storeEndTime - storeStartTime}ms (records: ${history.length})`,
-    );
-
+    const history = await loadAllMessages(store, conversationId);
     const visible = history
       .map(normalizeMessage)
       .filter((item): item is NormalizedMessage => item !== null);
-    const messages = dedupeAdjacent(mergeAssistantFragments(visible));
+    const inboxOnly = visible.filter(item => item.inbox);
+    const source = inboxOnly.length > 0 ? inboxOnly : visible;
+    const messages = dedupeAdjacent(mergeAssistantFragments(source));
+
+    let conversation: Record<string, unknown> | null = null;
+    try {
+      const raw = await store.getConversation({ conversationId } as any);
+      conversation = conversationSummary(raw, messages);
+    } catch {
+      conversation = conversationSummary({ conversationId }, messages);
+    }
 
     logger.log(
-      `[history] end: ${new Date().toISOString()}, total: ${Date.now() - requestStartTime}ms (${history.length} raw -> ${visible.length} visible -> ${messages.length} bubbles)`,
+      `[history] end: ${new Date().toISOString()}, total: ${Date.now() - requestStartTime}ms ` +
+        `(${history.length} raw -> ${messages.length} bubbles)`,
     );
 
-    return jsonResponse({ conversation_id: conversationId, messages });
+    return jsonResponse({ conversation_id: conversationId, messages, conversation });
   } catch (e) {
     logger.error('failed to get messages:', e);
-    logger.log(`[history] end: ${new Date().toISOString()}, total: ${Date.now() - requestStartTime}ms (error)`);
-    return jsonResponse({ conversation_id: conversationId, messages: [] });
+    return jsonResponse({ conversation_id: conversationId, messages: [], conversation: null });
   }
 }

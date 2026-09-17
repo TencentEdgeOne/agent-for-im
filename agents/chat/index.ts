@@ -21,6 +21,7 @@ import { run, Agent, OpenAIChatCompletionsModel, type Session } from '@openai/ag
 import { createLogger } from '../_logger';
 import { createTools } from '../_tools';
 import { sseResponse } from '../_sse';
+import { parseSource, recordInboxAssistant, recordInboxUser } from '../_inbox';
 
 const logger = createLogger('chat');
 const DEFAULT_MODEL = '@makers/deepseek-v4-flash';
@@ -52,12 +53,11 @@ function isDittoReply(text: string): boolean {
   return /^(同上|同上所述|同上回复|ditto|sameasabove)$/i.test(normalized);
 }
 
-async function runWithCallback(
+async function runAgentText(
   agent: Agent,
   message: string,
   session: Session | undefined,
-  callback: AgentCallback,
-): Promise<Response> {
+): Promise<string> {
   let result = await run(agent, message, { session });
   let text = String(result.finalOutput ?? '').trim();
   if (isDittoReply(text)) {
@@ -72,6 +72,16 @@ async function runWithCallback(
       text = '我这边没有可用的上文可引用，请再问一次具体问题。';
     }
   }
+  return text;
+}
+
+async function runWithCallback(
+  agent: Agent,
+  message: string,
+  session: Session | undefined,
+  callback: AgentCallback,
+): Promise<{ response: Response; text: string }> {
+  const text = await runAgentText(agent, message, session);
   logger.log(`[callback] POST ${callback.url} len=${text.length}`);
 
   const res = await fetch(callback.url, {
@@ -87,9 +97,12 @@ async function runWithCallback(
     throw new Error(`chat-callback HTTP ${res.status}: ${detail.slice(0, 200)}`);
   }
 
-  return new Response(JSON.stringify({ status: 'ok' }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  return {
+    response: new Response(JSON.stringify({ status: 'ok' }), {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+    text,
+  };
 }
 
 export async function onRequest(context: AgentContext) {
@@ -114,29 +127,24 @@ export async function onRequest(context: AgentContext) {
   const callback = parseCallback(body.callback);
   const signal: AbortSignal | undefined = context.request.signal;
 
-  logger.log(`[request] cid=${conversationId}, uid=${userId ?? '-'}, message="${message.slice(0, 50)}..."`);
+  const source = parseSource(body.source);
+  const env = context.env as Record<string, string | undefined>;
+  const modelName = env.AI_GATEWAY_MODEL ?? DEFAULT_MODEL;
 
-  // Write a user-indexed copy of the user message so /conversations
-  // (which scans the user_conversation_index prefix) can list this thread.
-  // The OpenAI Agents SDK Session adapter does NOT pass user_id when it
-  // persists turns, so without this manual write the user index stays
-  // empty and listConversations({userId}) returns []. The duplicate is
-  // filtered out of /history because that route already drops items
-  // marked with metadata.agent_sdk_session.
-  if (userId && conversationId) {
+  logger.log(`[request] cid=${conversationId}, uid=${userId ?? '-'}, platform=${source.platform}, message="${message.slice(0, 50)}..."`);
+
+  if (conversationId) {
     try {
-      const appendArgs: Record<string, unknown> = {
+      await recordInboxUser({
+        store: context.store as any,
         conversationId,
-        role: 'user',
         content: message,
-        userId,
-      };
-      if (userMsgId) appendArgs.messageId = userMsgId;
-      await context.store.appendMessage(appendArgs as any);
+        source,
+        messageId: userMsgId,
+        model: modelName,
+      });
     } catch (e) {
-      // Non-fatal — chat itself should keep working even if the
-      // user-index write fails.
-      logger.error('[chat] failed to write user index:', e);
+      logger.error('[chat] failed to write inbox user turn:', e);
     }
   }
 
@@ -145,8 +153,6 @@ export async function onRequest(context: AgentContext) {
     ? context.store.openaiSession(conversationId) as unknown as Session
     : undefined;
 
-  // Configure the OpenAI-compatible LLM model directly from runtime env.
-  const env = context.env as Record<string, string | undefined>;
   const llmClient = new OpenAI({
     apiKey: env.AI_GATEWAY_API_KEY,
     baseURL: env.AI_GATEWAY_BASE_URL,
@@ -187,7 +193,40 @@ export async function onRequest(context: AgentContext) {
   });
 
   if (callback) {
-    return runWithCallback(agent, message, session, callback);
+    try {
+      const { response, text } = await runWithCallback(agent, message, session, callback);
+      if (conversationId) {
+        try {
+          await recordInboxAssistant({
+            store: context.store as any,
+            conversationId,
+            content: text,
+            source,
+            model: modelName,
+          });
+        } catch (e) {
+          logger.error('[chat] failed to write inbox assistant turn:', e);
+        }
+      }
+      return response;
+    } catch (e) {
+      if (conversationId) {
+        const detail = e instanceof Error ? e.message : String(e);
+        try {
+          await recordInboxAssistant({
+            store: context.store as any,
+            conversationId,
+            content: `Agent error: ${detail.slice(0, 300)}`,
+            source,
+            model: modelName,
+            error: true,
+          });
+        } catch (writeErr) {
+          logger.error('[chat] failed to write inbox error turn:', writeErr);
+        }
+      }
+      throw e;
+    }
   }
 
   // Map an SDK stream event to a business SSE event, or null to skip.

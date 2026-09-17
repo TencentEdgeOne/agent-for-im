@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useT } from '../i18n';
 
-const TEMPLATE = 'openai-agents-starter-node';
+const TEMPLATE = 'agent-for-im';
 const AGENT_LANG = 'typescript';
 
 /**

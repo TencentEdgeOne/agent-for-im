@@ -1,26 +1,16 @@
-import { memo } from 'react';
-import type { Message } from '../types';
+import { memo, useState } from 'react';
+import type { InboxMessage } from '../types';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useT } from '../i18n';
+import { copyText, formatClock } from '../lib/format';
 import styles from './ChatBubble.module.css';
 
 interface Props {
-  message: Message;
+  message: InboxMessage;
+  model?: string;
 }
 
-/**
- * Some LLMs (especially fast/streaming tiers) emit Markdown tables as a
- * single squashed line — the `|` row boundaries arrive without the line
- * breaks GFM needs to recognise the block as a table. Result: react-markdown
- * just renders pipes as plain text.
- *
- * The two helpers below split a "| ... | | --- | --- | | a | b |" line back
- * into one row per line — but only when the second logical row is the
- * `| --- | --- |` separator (so this can't fire on prose that happens to
- * contain a pipe). Code fences are passed through verbatim so we don't
- * mangle inline shell snippets like `ls | grep foo`.
- */
 const TABLE_ROW_BOUNDARY = /\|\s+\|/g;
 const TABLE_SEPARATOR_ROW = /^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/;
 
@@ -50,7 +40,6 @@ function normalizeCompactTableLine(line: string): string {
 
 function normalizeMarkdown(content: string): string {
   let inCodeFence = false;
-
   return content
     .split('\n')
     .map((line) => {
@@ -58,34 +47,49 @@ function normalizeMarkdown(content: string): string {
         inCodeFence = !inCodeFence;
         return line;
       }
-
       return inCodeFence ? line : normalizeCompactTableLine(line);
     })
     .join('\n');
 }
 
-export default memo(function ChatBubble({ message }: Props) {
-  const { lang } = useT();
+export default memo(function ChatBubble({ message, model }: Props) {
+  const { t, lang } = useT();
   const isUser = message.role === 'user';
+  const [copied, setCopied] = useState(false);
 
-  if (!isUser && !message.content) return null;
+  const onCopy = async () => {
+    const ok = await copyText(message.content);
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  const who = isUser
+    ? (message.vendorUserName || t('inspector.user'))
+    : (message.model || model || 'Agent');
 
   return (
-    <div className={`${styles.row} ${isUser ? styles.userRow : styles.botRow}`}>
-      {!isUser && <div className={styles.avatar}>⬡</div>}
-      <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.botBubble}`}>
+    <div className={`${styles.block} ${isUser ? styles.user : styles.agent}`}>
+      <div className={styles.meta}>
+        {!isUser && <span className={styles.botMark}>⬡</span>}
+        <span className={isUser ? styles.userName : styles.agentName}>{who}</span>
+        {isUser && message.vendorUserId && (
+          <span className={styles.id}>{message.vendorUserId}</span>
+        )}
+        <span className={styles.time}>{formatClock(message.timestamp, lang)}</span>
+      </div>
+      <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.agentBubble}`}>
         {isUser ? (
-          message.content
+          <p className={styles.plain}>{message.content}</p>
         ) : (
-          <div className={`${styles.markdown} ${message.streaming ? styles.markdownStreaming : ''}`}>
+          <div className={styles.markdown}>
             <Markdown remarkPlugins={[remarkGfm]}>{normalizeMarkdown(message.content)}</Markdown>
           </div>
         )}
-        <span className={styles.time}>
-          {new Date(message.timestamp).toLocaleTimeString(lang === 'zh' ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
-        </span>
+        <button className={styles.copy} type="button" onClick={onCopy} title={copied ? t('stage.copied') : undefined}>
+          {copied ? t('stage.copied') : '⧉'}
+        </button>
       </div>
-      {isUser && <div className={`${styles.avatar} ${styles.userAvatar}`}>U</div>}
     </div>
   );
 });
