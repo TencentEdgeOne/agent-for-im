@@ -12,6 +12,7 @@
 import type { CloudFunctionContext } from '@edgeone/types';
 import {
   asRecord,
+  isArchivedErrorContent,
   jsonResponse,
   pickString,
   readJsonBody,
@@ -91,7 +92,7 @@ function normalizeMessage(item: MemoryMessage): NormalizedMessage | null {
   }
 
   const content = contentToText(item.content);
-  if (!content) return null;
+  if (!content || isArchivedErrorContent(content, meta)) return null;
 
   const source = sourceFromMeta(meta);
   return {

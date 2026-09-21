@@ -75,13 +75,7 @@ async function runAgentText(
   return text;
 }
 
-async function runWithCallback(
-  agent: Agent,
-  message: string,
-  session: Session | undefined,
-  callback: AgentCallback,
-): Promise<{ response: Response; text: string }> {
-  const text = await runAgentText(agent, message, session);
+async function deliverCallback(callback: AgentCallback, text: string): Promise<Response> {
   logger.log(`[callback] POST ${callback.url} len=${text.length}`);
 
   const res = await fetch(callback.url, {
@@ -97,12 +91,9 @@ async function runWithCallback(
     throw new Error(`chat-callback HTTP ${res.status}: ${detail.slice(0, 200)}`);
   }
 
-  return {
-    response: new Response(JSON.stringify({ status: 'ok' }), {
-      headers: { 'Content-Type': 'application/json' },
-    }),
-    text,
-  };
+  return new Response(JSON.stringify({ status: 'ok' }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 export async function onRequest(context: AgentContext) {
@@ -193,40 +184,21 @@ export async function onRequest(context: AgentContext) {
   });
 
   if (callback) {
-    try {
-      const { response, text } = await runWithCallback(agent, message, session, callback);
-      if (conversationId) {
-        try {
-          await recordInboxAssistant({
-            store: context.store as any,
-            conversationId,
-            content: text,
-            source,
-            model: modelName,
-          });
-        } catch (e) {
-          logger.error('[chat] failed to write inbox assistant turn:', e);
-        }
+    const text = await runAgentText(agent, message, session);
+    if (conversationId && text) {
+      try {
+        await recordInboxAssistant({
+          store: context.store as any,
+          conversationId,
+          content: text,
+          source,
+          model: modelName,
+        });
+      } catch (e) {
+        logger.error('[chat] failed to write inbox assistant turn:', e);
       }
-      return response;
-    } catch (e) {
-      if (conversationId) {
-        const detail = e instanceof Error ? e.message : String(e);
-        try {
-          await recordInboxAssistant({
-            store: context.store as any,
-            conversationId,
-            content: `Agent error: ${detail.slice(0, 300)}`,
-            source,
-            model: modelName,
-            error: true,
-          });
-        } catch (writeErr) {
-          logger.error('[chat] failed to write inbox error turn:', writeErr);
-        }
-      }
-      throw e;
     }
+    return deliverCallback(callback, text);
   }
 
   // Map an SDK stream event to a business SSE event, or null to skip.

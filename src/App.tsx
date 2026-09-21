@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConversationDetail, InboxConversation, InboxMessage } from './types';
 import { PLATFORMS } from './types';
 import { deleteConversation, fetchHistory, fetchInbox } from './api';
@@ -49,10 +49,13 @@ function AppInner() {
   const [configured, setConfigured] = useState<Record<string, boolean>>({});
   const [listLoading, setListLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(parseHashConversationId);
+  const initialId = parseHashConversationId();
+  const [activeId, setActiveId] = useState<string | null>(initialId);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
-  const [detail, setDetail] = useState<ConversationDetail | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [detail, setDetail] = useState<ConversationDetail | null>(
+    initialId ? { id: initialId, title: '', platform: 'im' } : null,
+  );
+  const [historyLoading, setHistoryLoading] = useState(Boolean(initialId));
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -111,11 +114,21 @@ function AppInner() {
 
   const conversationsRef = useRef<InboxConversation[]>([]);
   conversationsRef.current = conversations;
+  const threadReqRef = useRef(0);
+
+  const showThreadPlaceholder = useCallback((id: string) => {
+    const summary = conversationsRef.current.find((c) => c.id === id);
+    setMessages([]);
+    setHistoryLoading(true);
+    setDetail(summary ? { ...summary, id } : { id, title: '', platform: 'im' });
+  }, []);
 
   const loadThread = useCallback(async (id: string) => {
+    const reqId = ++threadReqRef.current;
     setHistoryLoading(true);
     try {
       const res = await fetchHistory(id);
+      if (reqId !== threadReqRef.current) return;
       setMessages(res.messages);
       const summary = conversationsRef.current.find((c) => c.id === id);
       setDetail({
@@ -124,7 +137,7 @@ function AppInner() {
         id,
       });
     } finally {
-      setHistoryLoading(false);
+      if (reqId === threadReqRef.current) setHistoryLoading(false);
     }
   }, []);
 
@@ -132,13 +145,23 @@ function AppInner() {
     void loadList('replace');
   }, [loadList]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!activeId) {
+      threadReqRef.current += 1;
       setMessages([]);
       setDetail(null);
+      setHistoryLoading(false);
       return;
     }
+    showThreadPlaceholder(activeId);
+  }, [activeId, showThreadPlaceholder]);
+
+  useEffect(() => {
+    if (!activeId) return;
     void loadThread(activeId);
+    return () => {
+      threadReqRef.current += 1;
+    };
   }, [activeId, loadThread]);
 
   const handleRefresh = useCallback(async () => {
@@ -174,8 +197,11 @@ function AppInner() {
   }, []);
 
   const selectConversation = (id: string) => {
-    setActiveId(id);
-    window.location.hash = `#/c/${id}`;
+    if (id !== activeId) {
+      showThreadPlaceholder(id);
+      setActiveId(id);
+      window.location.hash = `#/c/${id}`;
+    }
     setMobileView('thread');
   };
 

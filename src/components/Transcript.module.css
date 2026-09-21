@@ -269,12 +269,44 @@
   padding-left: 20px;
 }
 
-.loading {
-  height: 120px;
-  border-radius: 8px;
+.skeletonWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 4px;
+}
+
+.skeletonBubble {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 12px 12px 12px 2px;
+  border: 1px solid var(--bg-border);
   background: linear-gradient(90deg, #111118 0%, #1b1b20 50%, #111118 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s ease infinite;
+}
+
+.skeletonUser {
+  width: min(46rem, 72%);
+}
+
+.skeletonAssistant {
+  margin-left: 16px;
+  width: min(50rem, 80%);
+  border-left: 2px solid rgba(245, 200, 66, 0.35);
+}
+
+.skeletonLine,
+.skeletonLineShort {
+  height: 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.skeletonLineShort {
+  width: 58%;
 }
 
 .toast {

@@ -84,7 +84,9 @@ export default function Transcript({
     : (conversation.channelName || `#${shortId(conversation.channelId) || 'channel'}`);
 
   let lastDate = '';
-  const pending = conversation.pending || (messages.length > 0 && messages[messages.length - 1].role === 'user');
+  const pending = !loading && (
+    conversation.pending || (messages.length > 0 && messages[messages.length - 1].role === 'user')
+  );
 
   return (
     <section className={styles.stage}>
@@ -100,7 +102,7 @@ export default function Transcript({
             <div className={styles.headSub}>
               <span>{t('stage.thread')}: {shortId(conversation.threadId) || '—'}</span>
               <span>•</span>
-              <span className={styles.gold}>{messages.length} {t('stage.records')}</span>
+              <span className={styles.gold}>{loading ? '…' : messages.length} {t('stage.records')}</span>
               <span>•</span>
               <span className={styles.live}><i />{t('stage.unread')}</span>
             </div>
@@ -113,7 +115,26 @@ export default function Transcript({
       </header>
 
       <div className={styles.scroll}>
-        {loading && messages.length === 0 && <div className={styles.loading} />}
+        {loading && messages.length === 0 && (
+          <div className={styles.skeletonWrap} aria-hidden>
+            <div className={`${styles.skeletonBubble} ${styles.skeletonUser}`}>
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonLineShort} />
+            </div>
+            <div className={`${styles.skeletonBubble} ${styles.skeletonAssistant}`}>
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonLineShort} />
+            </div>
+            <div className={`${styles.skeletonBubble} ${styles.skeletonUser}`}>
+              <div className={styles.skeletonLine} />
+            </div>
+            <div className={`${styles.skeletonBubble} ${styles.skeletonAssistant}`}>
+              <div className={styles.skeletonLine} />
+              <div className={styles.skeletonLineShort} />
+            </div>
+          </div>
+        )}
         {messages.map((msg) => {
           const key = dateKey(msg.timestamp || 0);
           const showSep = key !== lastDate;

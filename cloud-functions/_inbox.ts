@@ -50,6 +50,14 @@ export async function readJsonBody(request: { json: () => Promise<unknown> } | u
   }
 }
 
+export function isArchivedErrorContent(
+  content: string,
+  meta?: Record<string, unknown>,
+): boolean {
+  if (meta?.error === true) return true;
+  return /^\s*Agent error:/i.test(content);
+}
+
 export function pickString(...values: unknown[]): string {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();

@@ -15,6 +15,7 @@ import {
   INBOX_USER_ID,
   PLATFORMS,
   asRecord,
+  isArchivedErrorContent,
   jsonResponse,
   pickCursor,
   pickList,
@@ -98,7 +99,8 @@ function normalizeConversation(raw: unknown): InboxConversation | null {
     pickString(item.title, meta.title) ||
     pickString(item.name, item.subject) ||
     'New chat';
-  const preview = pickString(item.preview, item.lastMessage, item.last_message, meta.preview) || undefined;
+  const rawPreview = pickString(item.preview, item.lastMessage, item.last_message, meta.preview);
+  const preview = rawPreview && !isArchivedErrorContent(rawPreview) ? rawPreview : undefined;
 
   let messageCount: number | undefined;
   const rawCount = item.messageCount ?? item.message_count;

@@ -152,13 +152,9 @@ export async function recordInboxAssistant(opts: {
   content: string;
   source: InboxSource;
   model?: string;
-  error?: boolean;
 }): Promise<void> {
-  const { store, conversationId, content, source, model, error } = opts;
-  const metadata = inboxMetadata(source, {
-    ...(model ? { model } : {}),
-    ...(error ? { error: true } : {}),
-  });
+  const { store, conversationId, content, source, model } = opts;
+  const metadata = inboxMetadata(source, model ? { model } : undefined);
   await store.appendMessage({
     conversationId,
     role: 'assistant',

@@ -6,6 +6,10 @@ export const API = {
   deleteConversation: '/delete-conversation',
 } as const;
 
+function isArchivedErrorMessage(content: string, error?: boolean): boolean {
+  return error === true || /^\s*Agent error:/i.test(content);
+}
+
 export async function fetchInbox(params: ListInboxParams = {}): Promise<InboxResponse> {
   const empty: InboxResponse = {
     conversations: [],
@@ -29,7 +33,11 @@ export async function fetchInbox(params: ListInboxParams = {}): Promise<InboxRes
     const data = (await res.json()) as InboxResponse;
     if (!data || !Array.isArray(data.conversations)) return empty;
     return {
-      conversations: data.conversations,
+      conversations: data.conversations.map((c) => (
+        c.preview && isArchivedErrorMessage(c.preview)
+          ? { ...c, preview: undefined }
+          : c
+      )),
       nextCursor: data.nextCursor,
       stats: data.stats ?? empty.stats,
       platformsConfigured: data.platformsConfigured ?? {},
@@ -55,7 +63,9 @@ export async function fetchHistory(conversationId: string): Promise<HistoryRespo
     const data = (await res.json()) as HistoryResponse;
     return {
       conversation_id: data.conversation_id || conversationId,
-      messages: Array.isArray(data.messages) ? data.messages : [],
+      messages: Array.isArray(data.messages)
+        ? data.messages.filter((m) => !isArchivedErrorMessage(m.content || '', m.error))
+        : [],
       conversation: data.conversation ?? null,
     };
   } catch {
