@@ -174,21 +174,23 @@ function AppInner() {
     }
   }, [activeId, loadList, loadThread]);
 
+  const clearSelection = useCallback(() => {
+    setActiveId(null);
+    window.location.hash = '';
+    setMobileView('list');
+  }, []);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         searchRef.current?.focus();
       }
-      if (event.key === 'Escape') {
-        setActiveId(null);
-        window.location.hash = '';
-        setMobileView('list');
-      }
+      if (event.key === 'Escape') clearSelection();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [clearSelection]);
 
   useEffect(() => {
     const onHash = () => setActiveId(parseHashConversationId());
@@ -209,6 +211,7 @@ function AppInner() {
     if (id === platform) return;
     beginListReplace();
     setPlatform(id);
+    clearSelection();
   };
 
   const handleToggleDm = () => {
@@ -256,9 +259,7 @@ function AppInner() {
     if (!window.confirm(t('inspector.deleteConfirm'))) return;
     await deleteConversation(activeId);
     setConversations((prev) => prev.filter((c) => c.id !== activeId));
-    setActiveId(null);
-    window.location.hash = '';
-    setMobileView('list');
+    clearSelection();
     void loadList('replace');
   };
 
