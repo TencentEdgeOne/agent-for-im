@@ -99,7 +99,7 @@ curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
 
 ### 企业微信（自建应用，仅 1:1）
 
-接收消息服务器 URL：`https://<domain>/wecom`。企业可信 IP 需要包含 EdgeOne 出口 IP。
+接收消息服务器 URL：`https://<domain>/wecom`。回消息走写死的固定出口 IP 云函数，把该 IP 配进「企业可信 IP」。
 
 | 变量 | 说明 |
 |------|------|

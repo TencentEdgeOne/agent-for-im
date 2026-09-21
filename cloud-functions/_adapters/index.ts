@@ -54,8 +54,7 @@ export type VendorAdapter = {
   replyUrl?: (raw: unknown) => string | undefined;
   postReplyUrl?: (url: string, text: string) => Promise<void>;
   /**
-   * Deliver the answer without Chat SDK `thread.post`. WeCom uses this to send
-   * `msgtype: text` — its markdown client renders unsupported syntax as「同上。」
+   * Deliver the answer without Chat SDK `thread.post`.
    */
   deliver?: (
     env: Record<string, string | undefined>,

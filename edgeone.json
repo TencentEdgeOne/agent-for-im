@@ -2,11 +2,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "cloudFunctions": {
-    "nodejs": {
-      "includeFiles": [],
-      "maxDuration": 120,
-      "externalNodeModules": ["discord.js"]
-    }
+    "maxDuration": 120,
+    "externalNodeModules": ["discord.js"]
   },
   "agents": {
     "timeout": 600,

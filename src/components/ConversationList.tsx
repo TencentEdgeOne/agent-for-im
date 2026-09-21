@@ -54,7 +54,7 @@ export default function ConversationList({
       <div className={styles.head}>
         <div className={styles.headLeft}>
           <span className={styles.title}>{t('list.title')}</span>
-          <span className={styles.count}>{conversations.length}{lang === 'zh' ? t('list.count') : ''}</span>
+          <span className={styles.count}>{loading ? '…' : `${conversations.length}${lang === 'zh' ? t('list.count') : ''}`}</span>
         </div>
         <label className={styles.dmToggle}>
           <span>{t('list.dmOnly')}</span>
@@ -63,9 +63,10 @@ export default function ConversationList({
         </label>
       </div>
 
-      <div className={styles.feed}>
+      <div className={styles.feed} aria-busy={loading}>
         {loading && conversations.length === 0 && (
           <div className={styles.skeletonWrap}>
+            <div className={styles.skeleton} />
             <div className={styles.skeleton} />
             <div className={styles.skeleton} />
             <div className={styles.skeleton} />
@@ -80,6 +81,7 @@ export default function ConversationList({
           </div>
         )}
 
+        <div className={loading && conversations.length > 0 ? styles.feedDim : undefined}>
         {conversations.map((conv) => {
           const color = PLATFORM_COLOR[conv.platform] || PLATFORM_COLOR.im;
           const active = conv.id === activeId;
@@ -111,10 +113,13 @@ export default function ConversationList({
             </button>
           );
         })}
+        </div>
       </div>
 
       <div className={styles.foot}>
-        {hasMore ? (
+        {loading ? (
+          <div className={styles.end}>{t('list.loading')}</div>
+        ) : hasMore ? (
           <button type="button" className={styles.more} onClick={onLoadMore} disabled={loadingMore}>
             {loadingMore ? '…' : t('list.loadMore')}
           </button>

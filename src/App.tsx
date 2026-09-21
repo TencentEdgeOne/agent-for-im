@@ -57,13 +57,27 @@ function AppInner() {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mobileView, setMobileView] = useState<'list' | 'thread'>('list');
+  const listReqRef = useRef(0);
+
+  const beginListReplace = useCallback(() => {
+    listReqRef.current += 1;
+    setConversations([]);
+    setNextCursor(undefined);
+    setListLoading(true);
+  }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 280);
+    const timer = window.setTimeout(() => {
+      const next = query.trim();
+      if (next === debouncedQuery) return;
+      beginListReplace();
+      setDebouncedQuery(next);
+    }, 280);
     return () => window.clearTimeout(timer);
-  }, [query]);
+  }, [query, debouncedQuery, beginListReplace]);
 
   const loadList = useCallback(async (mode: 'replace' | 'append', cursor?: string) => {
+    const reqId = mode === 'replace' ? ++listReqRef.current : listReqRef.current;
     if (mode === 'append') setLoadingMore(true);
     else setListLoading(true);
     try {
@@ -74,6 +88,7 @@ function AppInner() {
         limit: PAGE_SIZE,
         after: cursor,
       });
+      if (reqId !== listReqRef.current) return;
       setStats(res.stats);
       setConfigured(res.platformsConfigured);
       setNextCursor(res.nextCursor);
@@ -87,8 +102,10 @@ function AppInner() {
         setConversations(res.conversations);
       }
     } finally {
-      setListLoading(false);
-      setLoadingMore(false);
+      if (reqId === listReqRef.current) {
+        setListLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, [platform, debouncedQuery, dmOnly]);
 
@@ -160,6 +177,17 @@ function AppInner() {
     setActiveId(id);
     window.location.hash = `#/c/${id}`;
     setMobileView('thread');
+  };
+
+  const handlePlatformChange = (id: string) => {
+    if (id === platform) return;
+    beginListReplace();
+    setPlatform(id);
+  };
+
+  const handleToggleDm = () => {
+    beginListReplace();
+    setDmOnly((v) => !v);
   };
 
   const flashCopied = async (text: string) => {
@@ -265,18 +293,29 @@ function AppInner() {
         </div>
       </header>
 
-      <nav className={styles.chips}>
-        {chips.map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            className={platform === chip.id ? styles.chipOn : styles.chip}
-            onClick={() => setPlatform(chip.id)}
-          >
-            {t(PLATFORM_I18N[chip.id])}
-            <em>{chip.count}</em>
-          </button>
-        ))}
+      <nav className={styles.chips} aria-busy={listLoading}>
+        {chips.map((chip) => {
+          const selected = platform === chip.id;
+          return (
+            <button
+              key={chip.id}
+              type="button"
+              className={selected ? styles.chipOn : styles.chip}
+              aria-pressed={selected}
+              aria-busy={selected && listLoading}
+              onClick={() => handlePlatformChange(chip.id)}
+            >
+              {t(PLATFORM_I18N[chip.id])}
+              {selected && listLoading ? (
+                <em className={styles.chipBusy} aria-hidden>
+                  <i className={styles.chipSpin} />
+                </em>
+              ) : (
+                <em>{chip.count}</em>
+              )}
+            </button>
+          );
+        })}
       </nav>
 
       <div className={`${styles.workspace} ${activeId && mobileView === 'thread' ? styles.threadMode : ''}`}>
@@ -288,7 +327,7 @@ function AppInner() {
           hasMore={Boolean(nextCursor)}
           total={stats.total}
           dmOnly={dmOnly}
-          onToggleDm={() => setDmOnly((v) => !v)}
+          onToggleDm={handleToggleDm}
           onSelect={selectConversation}
           onLoadMore={() => void loadList('append', nextCursor)}
         />

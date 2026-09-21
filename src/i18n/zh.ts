@@ -23,6 +23,7 @@ const zh = {
   "list.dmOnly": "仅私聊",
   "list.emptyTitle": "还没有记录",
   "list.emptyHint": "在 Slack、飞书或钉钉里 @机器人 后，对话会实时归档到这里。",
+  "list.loading": "加载中…",
   "list.syncing": "实时同步中",
   "list.loadMore": "加载更多会话",
   "list.end": "已展示全量归档会话",

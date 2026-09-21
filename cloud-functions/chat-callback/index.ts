@@ -30,10 +30,29 @@ function sanitizeCallbackError(detail: string): string {
     .replace(/access_token=[^&\s"'\\]+/gi, 'access_token=***')
     .replace(/corpsecret=[^&\s"'\\]+/gi, 'corpsecret=***');
   const ip = redacted.match(/from ip:\s*([\d.]+)/i)?.[1];
+  if (/435|URL_NOT_FOUND|FunctionNotFound/i.test(redacted)) {
+    return (
+      'WeCom proxy SCF 435 URL_NOT_FOUND: use the public Function URL ' +
+      'https://1256816668-gzwfxjk50f.ap-singapore.tencentscf.com (not *.in.*).'
+    );
+  }
   if (/errcode=60020|not allow to access from your ip/i.test(redacted)) {
     return (
-      `WeCom 60020: message/send blocked from ${ip ?? 'this function\'s egress IP'}. ` +
-      `Add that IP under 应用管理 → 该应用 → 企业可信IP. EdgeOne egress IPs can change.`
+      `WeCom 60020: message/send blocked from ${ip ?? 'the proxy egress IP'}. ` +
+      `Add the SCF static outbound IP under 应用管理 → 该应用 → 企业可信IP.`
+    );
+  }
+  if (/access_token missing|echoed the Function URL|event envelope/i.test(redacted)) {
+    return (
+      'WeCom proxy is echoing the Function URL event, not calling qyapi. ' +
+      'Upload scripts/wecom-scf-proxy.js as SCF main_handler (Node CJS, not the ESM .mjs).'
+    );
+  }
+  if (/HTTP 443|0 code exit unexpected|UserCodeError/i.test(redacted)) {
+    return (
+      'WeCom proxy SCF 443 UserCodeError: fixedipforwecom crashed before returning. ' +
+      'Use scripts/wecom-scf-proxy.js (https, not fetch), event function + Node CJS, ' +
+      'and set the timeout to at least 10s (3s dies mid-qyapi).'
     );
   }
   return redacted.slice(0, 300);

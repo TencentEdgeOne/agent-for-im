@@ -99,7 +99,7 @@ Event Request URL: `https://<domain>/feishu` (https, no trailing slash). Subscri
 
 ### WeCom (self-built app, 1:1)
 
-接收消息服务器 URL: `https://<domain>/wecom`. Add the EdgeOne egress IP under 企业可信IP.
+接收消息服务器 URL: `https://<domain>/wecom`. Replies go through a hardcoded SCF with a static outbound IP. Add that IP under 企业可信IP.
 
 | Variable | Description |
 |----------|-------------|

@@ -235,6 +235,16 @@
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.chip:hover {
+  border-color: rgba(245, 200, 66, 0.45);
+  color: var(--text-primary);
+}
+
+.chip:active, .chipOn:active {
+  transform: scale(0.97);
 }
 
 .chipOn {
@@ -249,9 +259,28 @@
   padding: 0 5px;
   border-radius: 99px;
   background: rgba(0,0,0,0.18);
+  min-width: 16px;
+  text-align: center;
 }
 
 .chip em { background: #2a292f; }
+
+.chipBusy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 14px;
+}
+
+.chipSpin {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid rgba(10, 10, 15, 0.28);
+  border-top-color: #0a0a0f;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
 
 .workspace {
   flex: 1;

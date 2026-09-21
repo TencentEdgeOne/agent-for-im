@@ -93,6 +93,12 @@
   min-height: 0;
 }
 
+.feedDim {
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
 .row {
   display: flex;
   flex-direction: column;

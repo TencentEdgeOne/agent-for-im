@@ -23,6 +23,7 @@ const en = {
   "list.dmOnly": "DMs only",
   "list.emptyTitle": "No records yet",
   "list.emptyHint": "Mention the bot in Slack, Feishu, or DingTalk and the thread will archive here.",
+  "list.loading": "Loading…",
   "list.syncing": "Live sync",
   "list.loadMore": "Load more",
   "list.end": "Showing all archived conversations",
