@@ -149,7 +149,7 @@ agent-for-im/
 ├── cloud-functions/                 # IM webhooks and conversation APIs
 │   ├── slack/ · discord/ · telegram/ · feishu/ · wecom/ · dingtalk/
 │   ├── chat-callback/
-│   ├── history/ · inbox/ · conversations/ · clear-history/ · delete-conversation/
+│   ├── history/ · inbox/ · delete-conversation/
 │   └── _adapters/                  # One file per vendor
 ├── src/                             # React + Vite inbox (read-only archive)
 ├── scripts/discord-gateway.mjs

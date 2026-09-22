@@ -149,7 +149,7 @@ agent-for-im/
 ├── cloud-functions/                 # IM webhook 和会话接口
 │   ├── slack/ · discord/ · telegram/ · feishu/ · wecom/ · dingtalk/
 │   ├── chat-callback/
-│   ├── history/ · inbox/ · conversations/ · clear-history/ · delete-conversation/
+│   ├── history/ · inbox/ · delete-conversation/
 │   └── _adapters/                  # 每个平台一个文件
 ├── src/                             # React + Vite 归档台（只读）
 ├── scripts/discord-gateway.mjs
