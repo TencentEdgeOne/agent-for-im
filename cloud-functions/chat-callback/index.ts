@@ -25,37 +25,31 @@ function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
 }
 
-function sanitizeCallbackError(detail: string): string {
-  const redacted = detail
+function redactCallbackError(detail: string): string {
+  return detail
     .replace(/access_token=[^&\s"'\\]+/gi, 'access_token=***')
-    .replace(/corpsecret=[^&\s"'\\]+/gi, 'corpsecret=***');
-  const ip = redacted.match(/from ip:\s*([\d.]+)/i)?.[1];
-  if (/435|URL_NOT_FOUND|FunctionNotFound/i.test(redacted)) {
-    return (
-      'WeCom proxy SCF 435 URL_NOT_FOUND: use the public Function URL ' +
-      'https://1256816668-gzwfxjk50f.ap-singapore.tencentscf.com (not *.in.*).'
-    );
+    .replace(/corpsecret=[^&\s"'\\]+/gi, 'corpsecret=***')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer ***')
+    .replace(/https?:\/\/[^\s"'\\]+/gi, '[url]')
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[ip]')
+    .replace(/request[_-]?id["']?\s*[:=]\s*["']?[A-Za-z0-9-]+/gi, 'request_id=***')
+    .slice(0, 300);
+}
+
+function sanitizeCallbackError(detail: string): string {
+  if (/435|URL_NOT_FOUND|FunctionNotFound/i.test(detail)) {
+    return 'delivery failed: wecom proxy not found';
   }
-  if (/errcode=60020|not allow to access from your ip/i.test(redacted)) {
-    return (
-      `WeCom 60020: message/send blocked from ${ip ?? 'the proxy egress IP'}. ` +
-      `Add the SCF static outbound IP under 应用管理 → 该应用 → 企业可信IP.`
-    );
+  if (/errcode=60020|not allow to access from your ip/i.test(detail)) {
+    return 'delivery failed: wecom ip not allowlisted';
   }
-  if (/access_token missing|echoed the Function URL|event envelope/i.test(redacted)) {
-    return (
-      'WeCom proxy is echoing the Function URL event, not calling qyapi. ' +
-      'Upload scripts/wecom-scf-proxy.js as SCF main_handler (Node CJS, not the ESM .mjs).'
-    );
+  if (/access_token missing|echoed the Function URL|event envelope/i.test(detail)) {
+    return 'delivery failed: wecom proxy misconfigured';
   }
-  if (/HTTP 443|0 code exit unexpected|UserCodeError/i.test(redacted)) {
-    return (
-      'WeCom proxy SCF 443 UserCodeError: fixedipforwecom crashed before returning. ' +
-      'Use scripts/wecom-scf-proxy.js (https, not fetch), event function + Node CJS, ' +
-      'and set the timeout to at least 10s (3s dies mid-qyapi).'
-    );
+  if (/HTTP 443|0 code exit unexpected|UserCodeError/i.test(detail)) {
+    return 'delivery failed: wecom proxy crashed';
   }
-  return redacted.slice(0, 300);
+  return 'delivery failed';
 }
 
 export async function onRequestPost(context: CloudFunctionContext): Promise<Response> {
@@ -94,7 +88,7 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
         return jsonResponse({ status: 'ok' });
       } catch (e) {
         const detail = e instanceof Error ? e.message : String(e);
-        logger.error(`replyUrl failed, falling back to adapter post: ${detail}`);
+        logger.error(`replyUrl failed, falling back to adapter post: ${redactCallbackError(detail)}`);
       }
     }
 
@@ -113,7 +107,7 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
     return jsonResponse({ status: 'ok' });
   } catch (e) {
     const detail = e instanceof Error ? e.stack || e.message : String(e);
-    logger.error(`unhandled chat-callback error: ${sanitizeCallbackError(detail)}`);
+    logger.error(`unhandled chat-callback error: ${redactCallbackError(detail)}`);
     return jsonResponse({ status: 'error', message: sanitizeCallbackError(detail) }, 500);
   }
 }
