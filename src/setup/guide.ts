@@ -56,7 +56,7 @@ const copy = {
     slack: {
       label: 'Slack',
       paste: '粘贴到 Slack App 后台 Event Subscriptions 的 Request URL。',
-      challenge: '提交 Request URL 后，Slack 会发送带 challenge 的校验请求。网关会自动应答，填入后即可通过。',
+      challenge: '保存 Request URL 时 Slack 会发 challenge，网关会自动应答。',
       steps: [
         { title: '进入官方控制台', body: '打开 [Slack API Console](https://api.slack.com/apps)，选中应用，进入 Features > [Event Subscriptions](https://api.slack.com/apis/connections/events-api)。' },
         { title: '粘贴端点并触发验证', body: '开启 Enable Events，把 Webhook URL 填进 Request URL，等待 Verified。' },
@@ -66,7 +66,7 @@ const copy = {
     feishu: {
       label: '飞书',
       paste: '粘贴到飞书开放平台「事件与回调」的请求地址，地址不要带结尾斜杠。',
-      challenge: '保存请求地址时，飞书会发送 url_verification。网关会回传 challenge。',
+      challenge: '保存请求地址时，飞书发送 url_verification，网关回传 challenge。',
       steps: [
         { title: '进入事件与回调', body: '打开 [飞书开放平台](https://open.feishu.cn/app) 应用，进入「[事件与回调](https://open.feishu.cn/document/server-docs/event-subscription-guide/overview)」。' },
         { title: '填写请求地址', body: '把 Webhook URL 填入请求地址，并配置 [Encrypt Key](https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/encrypt-key-encryption-configuration-case) 与 Verification Token。' },
@@ -76,7 +76,7 @@ const copy = {
     dingtalk: {
       label: '钉钉',
       paste: '粘贴到钉钉企业内部机器人的消息接收地址。',
-      challenge: '钉钉回调使用签名校验。App Key、App Secret 与 Robot Code 需要和这里保存的一致。',
+      challenge: '回调按签名校验。App Key、App Secret、Robot Code 需与这里一致。',
       steps: [
         { title: '打开机器人配置', body: '进入 [钉钉开放平台](https://open-dev.dingtalk.com/)，找到企业内部应用的 [机器人](https://open.dingtalk.com/document/orgapp/robot-overview)。' },
         { title: '填写 HTTP 回调', body: '消息接收模式选 [HTTP](https://open.dingtalk.com/document/orgapp/robot-overview)，把 Webhook URL 填入接收地址。' },
@@ -86,7 +86,7 @@ const copy = {
     discord: {
       label: 'Discord',
       paste: '粘贴到 Discord Developer Portal 的 Interactions Endpoint URL。',
-      challenge: '保存端点时 Discord 会发送 PING。网关会回 PONG。频道 @消息还需要单独的 Gateway 监听。',
+      challenge: '保存端点时 Discord 发送 PING，网关回 PONG。频道 @消息还需 Gateway。',
       steps: [
         { title: '打开应用设置', body: '进入 [Discord Developer Portal](https://discord.com/developers/applications)，打开对应应用。' },
         { title: '填写 Interactions URL', body: '把 Webhook URL 填入 [Interactions Endpoint URL](https://discord.com/developers/docs/interactions/receiving-and-responding#receiving-an-interaction)，并打开 [Message Content Intent](https://discord.com/developers/docs/topics/gateway#message-content-intent)。' },
@@ -96,7 +96,7 @@ const copy = {
     telegram: {
       label: 'Telegram',
       paste: '用 Bot API setWebhook 把这个地址注册为 webhook。',
-      challenge: '请求头里的 secret token 用来确认更新来自 Telegram。保存 Bot Token 后，可在最后一步导出 .env 再注册。',
+      challenge: 'secret token 用来确认请求来自 Telegram。',
       steps: [
         { title: '向 BotFather 取 Token', body: '在 [BotFather](https://t.me/BotFather) 创建机器人，复制形如 123456:ABC 的 token。' },
         { title: '注册 Webhook', body: '调用 [setWebhook](https://core.telegram.org/bots/api#setwebhook)，url 填本页地址。群里默认只收到 @消息。' },
@@ -106,7 +106,7 @@ const copy = {
     wecom: {
       label: '企业微信',
       paste: '粘贴到企业微信自建应用的接收消息服务器 URL。',
-      challenge: '保存时企业微信会用 GET 发送 echostr。Token 与 EncodingAESKey 需要和这里一致。',
+      challenge: '保存时企微会 GET echostr。Token 与 EncodingAESKey 需与这里一致。',
       steps: [
         { title: '打开自建应用', body: '进入 [企业微信管理后台](https://work.weixin.qq.com/wework_admin/frame)，打开要接入的自建应用。' },
         { title: '设置接收消息', body: '把本页地址填入[接收消息服务器 URL](https://developer.work.weixin.qq.com/document/path/90930)，并填入 Token 与 EncodingAESKey。' },
@@ -118,7 +118,7 @@ const copy = {
     slack: {
       label: 'Slack',
       paste: 'Paste this into Event Subscriptions → Request URL in the Slack app settings.',
-      challenge: 'Slack sends a challenge request when you save the Request URL. The gateway answers it automatically.',
+      challenge: 'Slack sends a challenge when you save the Request URL. The gateway answers it.',
       steps: [
         { title: 'Open the API console', body: 'Open the [Slack API Console](https://api.slack.com/apps) and go to Features > [Event Subscriptions](https://api.slack.com/apis/connections/events-api).' },
         { title: 'Paste the endpoint', body: 'Turn on Enable Events, paste the Webhook URL, and wait for Verified.' },
@@ -128,7 +128,7 @@ const copy = {
     feishu: {
       label: 'Feishu',
       paste: 'Paste this into the Feishu event request URL. Do not add a trailing slash.',
-      challenge: 'Feishu sends url_verification when you save the URL. The gateway returns the challenge.',
+      challenge: 'Feishu sends url_verification when you save the URL. The gateway returns it.',
       steps: [
         { title: 'Open events', body: 'In the [Feishu open platform](https://open.feishu.cn/app), open [Event subscriptions](https://open.feishu.cn/document/server-docs/event-subscription-guide/overview) for the app.' },
         { title: 'Set the request URL', body: 'Paste the Webhook URL and fill [Encrypt Key](https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/encrypt-key-encryption-configuration-case) plus Verification Token.' },
@@ -138,7 +138,7 @@ const copy = {
     dingtalk: {
       label: 'DingTalk',
       paste: 'Paste this into the DingTalk internal robot HTTP callback.',
-      challenge: 'DingTalk signs callbacks. App Key, App Secret, and Robot Code must match what you save here.',
+      challenge: 'Callbacks are signed. App Key, App Secret, and Robot Code must match.',
       steps: [
         { title: 'Open the robot', body: 'In the [DingTalk open platform](https://open-dev.dingtalk.com/), open the internal-app [robot](https://open.dingtalk.com/document/orgapp/robot-overview).' },
         { title: 'Set the HTTP callback', body: 'Choose [HTTP](https://open.dingtalk.com/document/orgapp/robot-overview) and paste the Webhook URL as the receive address.' },
@@ -148,7 +148,7 @@ const copy = {
     discord: {
       label: 'Discord',
       paste: 'Paste this into the Discord Interactions Endpoint URL.',
-      challenge: 'Discord sends a PING when you save the endpoint. The gateway replies with PONG. Channel @mentions also need the Gateway listener.',
+      challenge: 'Discord sends a PING when you save the endpoint. The gateway replies PONG. Channel @mentions also need the Gateway.',
       steps: [
         { title: 'Open the application', body: 'Open the app in the [Discord Developer Portal](https://discord.com/developers/applications).' },
         { title: 'Set the interactions URL', body: 'Paste the Webhook URL into the [Interactions Endpoint URL](https://discord.com/developers/docs/interactions/receiving-and-responding#receiving-an-interaction) and enable the [Message Content Intent](https://discord.com/developers/docs/topics/gateway#message-content-intent).' },
@@ -158,7 +158,7 @@ const copy = {
     telegram: {
       label: 'Telegram',
       paste: 'Register this URL with the Bot API setWebhook method.',
-      challenge: 'The secret token proves an update came from Telegram. Export .env on the last step, then register the webhook.',
+      challenge: 'The secret token proves the update came from Telegram.',
       steps: [
         { title: 'Copy the bot token', body: 'Create the bot in [BotFather](https://t.me/BotFather) and copy the token.' },
         { title: 'Call setWebhook', body: 'Call [setWebhook](https://core.telegram.org/bots/api#setwebhook) with url set to this page’s address. Groups only deliver @mentions by default.' },
@@ -168,7 +168,7 @@ const copy = {
     wecom: {
       label: 'WeCom',
       paste: 'Paste this into the WeCom self-built app callback URL.',
-      challenge: 'WeCom verifies the URL with a GET echostr. Token and EncodingAESKey must match the values saved here.',
+      challenge: 'WeCom verifies the URL with a GET echostr. Token and EncodingAESKey must match.',
       steps: [
         { title: 'Open the app', body: 'In the [WeCom admin console](https://work.weixin.qq.com/wework_admin/frame), open the self-built app.' },
         { title: 'Set the callback', body: 'Paste the Webhook URL into the [callback URL](https://developer.work.weixin.qq.com/document/path/90930) and enter Token plus EncodingAESKey.' },
