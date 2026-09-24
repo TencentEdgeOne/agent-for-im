@@ -1,8 +1,8 @@
 # Agent for IM
 
-跑在 [EdgeOne Makers](https://cloud.tencent.com/document/product/1552/132759) 上的多平台 IM Agent。同一套 OpenAI Agents SDK 运行时，同时回答 Slack、Discord、Telegram、飞书、企业微信、钉钉。Web 页面是这些对话的只读归档。
+跑在 [EdgeOne Makers](https://cloud.tencent.com/document/product/1552/132759) 上的多平台 IM Agent。基于Agent，同时回答 Slack、Discord、Telegram、飞书、企业微信、钉钉。
 
-**Framework：** OpenAI Agents SDK · **Language：** TypeScript
+**Framework：** Chat SDK · **Language：** TypeScript
 
 [English](./README.md) · [GitHub](https://github.com/TencentEdgeOne/agent-for-im)
 
@@ -20,7 +20,7 @@
 
 Discord 频道消息需要启动 `POST /discord-gateway`，或本地跑 `npm run gateway`。同一个 bot token 不要同时开两个 listener。
 
-## Web 归档台
+## Web 集成指引与归档
 
 前端是只读的多渠道会话归档，不再提供网页试聊。每次 IM 对话结束后，Agent 会把渠道、用户原文和回复写入 Makers `context.store`。页面通过这些接口查看：
 

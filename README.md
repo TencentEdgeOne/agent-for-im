@@ -1,8 +1,8 @@
 # Agent for IM
 
-A multi-platform IM agent on [EdgeOne Makers](https://pages.edgeone.ai/document/agents). One OpenAI Agents SDK runtime answers Slack, Discord, Telegram, Feishu, WeCom, and DingTalk. The web UI is a read-only archive of those conversations.
+A multi-platform IM agent on [EdgeOne Makers](https://pages.edgeone.ai/document/agents). Use agent to answers Slack, Discord, Telegram, Feishu, WeCom, and DingTalk. 
 
-**Framework:** OpenAI Agents SDK · **Language:** TypeScript
+**Framework:** Chat SDK · **Language:** TypeScript
 
 [中文文档](./README_zh-CN.md) · [GitHub](https://github.com/TencentEdgeOne/agent-for-im)
 
