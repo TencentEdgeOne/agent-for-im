@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ConversationDetail, InboxConversation, InboxMessage } from './types';
 import { PLATFORMS } from './types';
-import { deleteConversation, fetchHistory, fetchInbox } from './api';
+import { deleteConversation, fetchHistory, fetchImSettings, fetchInbox } from './api';
 import { I18nProvider, useT, type MessageKeys } from './i18n';
 import {
   conversationPermalink,
@@ -14,6 +14,8 @@ import Transcript, { CopyToast } from './components/Transcript';
 import Inspector from './components/Inspector';
 import GitHubLink from './components/GitHubLink';
 import DeployLink from './components/DeployLink';
+import SetupWizard from './components/SetupWizard';
+import { isOfficialTemplate, loadDraft, saveDraft } from './setup/guide';
 import styles from './App.module.css';
 
 const PAGE_SIZE = 20;
@@ -31,12 +33,23 @@ const PLATFORM_I18N: Record<string, MessageKeys> = {
 export default function App() {
   return (
     <I18nProvider>
-      <AppInner />
+      <AppGate />
     </I18nProvider>
   );
 }
 
-function AppInner() {
+function AppGate() {
+  const official = isOfficialTemplate(window.location.hostname);
+  const [entered, setEntered] = useState(() => !official && loadDraft().entered);
+  const leaveSetup = () => {
+    saveDraft({ ...loadDraft(), entered: false });
+    setEntered(false);
+  };
+  if (official || !entered) return <SetupWizard onEnter={() => setEntered(true)} />;
+  return <AppInner onSetup={leaveSetup} />;
+}
+
+function AppInner({ onSetup }: { onSetup: () => void }) {
   const { t, lang, setLang } = useT();
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
@@ -93,7 +106,6 @@ function AppInner() {
       });
       if (reqId !== listReqRef.current) return;
       setStats(res.stats);
-      setConfigured(res.platformsConfigured);
       setNextCursor(res.nextCursor);
       setUpdatedAt(Date.now());
       if (mode === 'append') {
@@ -141,9 +153,19 @@ function AppInner() {
     }
   }, []);
 
+  const loadConfigured = useCallback(async () => {
+    const remote = await fetchImSettings();
+    if (!remote.ok) return;
+    setConfigured(remote.settings.configured);
+  }, []);
+
   useEffect(() => {
     void loadList('replace');
   }, [loadList]);
+
+  useEffect(() => {
+    void loadConfigured();
+  }, [loadConfigured]);
 
   useLayoutEffect(() => {
     if (!activeId) {
@@ -167,12 +189,15 @@ function AppInner() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadList('replace');
-      if (activeId) await loadThread(activeId);
+      await Promise.all([
+        loadList('replace'),
+        loadConfigured(),
+        activeId ? loadThread(activeId) : Promise.resolve(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [activeId, loadList, loadThread]);
+  }, [activeId, loadConfigured, loadList, loadThread]);
 
   const clearSelection = useCallback(() => {
     setActiveId(null);
@@ -304,6 +329,9 @@ function AppInner() {
         </div>
         <div className={styles.topRight}>
           <span className={styles.updated}>{updatedLabel}</span>
+          <button type="button" className={styles.refreshBtn} onClick={onSetup}>
+            {t('header.setup')}
+          </button>
           <button
             type="button"
             className={styles.refreshBtn}

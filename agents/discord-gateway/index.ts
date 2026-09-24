@@ -31,6 +31,7 @@
 import type { AgentContext } from '@edgeone/types';
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js';
 import { createLogger } from '../_logger';
+import { loadSettings, type SettingsStore } from '../../cloud-functions/_settings';
 
 const logger = createLogger('discord-gateway');
 
@@ -199,7 +200,7 @@ async function runGatewayListener(opts: {
 }
 
 export async function onRequest(context: AgentContext): Promise<Response> {
-  const env = context.env as Record<string, string | undefined>;
+  const env = await loadSettings(context.store as unknown as SettingsStore);
   const request = context.request;
   const headers = request.headers ?? {};
 

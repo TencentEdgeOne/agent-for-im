@@ -4,8 +4,6 @@ A multi-platform IM agent on [EdgeOne Makers](https://pages.edgeone.ai/document/
 
 **Framework:** Chat SDK · **Language:** TypeScript
 
-[中文文档](./README_zh-CN.md) · [GitHub](https://github.com/TencentEdgeOne/agent-for-im)
-
 ## Supported platforms
 
 | Platform | Route | Setup |

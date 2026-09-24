@@ -40,10 +40,8 @@ export function isTelegramBotToken(value: string): boolean {
 
 export function resolveTelegramEnv(env: TelegramEnv): TelegramEnv {
   return {
-    TELEGRAM_BOT_TOKEN: normalizeSecret(env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN),
-    TELEGRAM_WEBHOOK_SECRET_TOKEN: normalizeSecret(
-      env.TELEGRAM_WEBHOOK_SECRET_TOKEN || process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN,
-    ),
+    TELEGRAM_BOT_TOKEN: normalizeSecret(env.TELEGRAM_BOT_TOKEN),
+    TELEGRAM_WEBHOOK_SECRET_TOKEN: normalizeSecret(env.TELEGRAM_WEBHOOK_SECRET_TOKEN),
   };
 }
 

@@ -11,7 +11,7 @@ const AGENT_LANG = 'typescript';
  * everywhere else (Tencent Cloud console, local dev) we point to the
  * console domain so authenticated users land on the right tenant.
  */
-function getDeployUrl(): string {
+export function getDeployUrl(): string {
   const deployParams = `?template=${TEMPLATE}&from=within&fromAgent=1&agentLang=${AGENT_LANG}`;
   const edgeoneDeployUrl = `https://edgeone.ai/makers/new${deployParams}`;
   const cloudDeployUrl = `https://console.cloud.tencent.com/edgeone/makers/new${deployParams}`;

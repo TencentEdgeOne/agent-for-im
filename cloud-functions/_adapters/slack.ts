@@ -27,10 +27,8 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 export function resolveSlackEnv(env: SlackEnv): SlackEnv {
   return {
-    SLACK_BOT_TOKEN: normalizeSecret(env.SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN),
-    SLACK_SIGNING_SECRET: normalizeSecret(
-      env.SLACK_SIGNING_SECRET || process.env.SLACK_SIGNING_SECRET,
-    ),
+    SLACK_BOT_TOKEN: normalizeSecret(env.SLACK_BOT_TOKEN),
+    SLACK_SIGNING_SECRET: normalizeSecret(env.SLACK_SIGNING_SECRET),
   };
 }
 

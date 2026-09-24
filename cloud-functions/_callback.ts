@@ -72,7 +72,7 @@ export function resolveCallbackEnv(env: CallbackEnv): CallbackEnv {
  * authenticates every request against this. Replies fail without it.
  */
 export function callbackSecret(env: CallbackEnv): string {
-  return normalizeSecret(env.AGENT_CALLBACK_SECRET || process.env.AGENT_CALLBACK_SECRET);
+  return normalizeSecret(env.AGENT_CALLBACK_SECRET);
 }
 
 export function isCallbackAuthorized(header: string | null, secret: string): boolean {

@@ -4,6 +4,7 @@ const zh = {
   "search.placeholder": "搜索消息、频道、用户…",
   "search.hotkey": "⌘K",
   "header.refresh": "刷新",
+  "header.setup": "引导",
   "header.lastRefresh": "上次刷新",
   "header.notLoaded": "尚未加载",
   "lang.zh": "ZH",

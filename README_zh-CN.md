@@ -4,8 +4,6 @@
 
 **Framework：** Chat SDK · **Language：** TypeScript
 
-[English](./README.md) · [GitHub](https://github.com/TencentEdgeOne/agent-for-im)
-
 ## 已接入平台
 
 | 平台 | 路由 | 接入方式 |

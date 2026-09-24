@@ -10,7 +10,6 @@
  */
 
 import type { CloudFunctionContext } from '@edgeone/types';
-import { buildAdapters } from '../_adapters';
 import {
   INBOX_USER_ID,
   PLATFORMS,
@@ -26,6 +25,7 @@ import {
   type InboxSource,
 } from '../_inbox';
 import { createLogger } from '../_logger';
+import { configuredPlatforms, isSettingsConversation, loadSettings, type SettingsStore } from '../_settings';
 
 const logger = createLogger('inbox');
 
@@ -162,7 +162,7 @@ async function pullConversationPages(
     const items = pickList(result);
     for (const raw of items) {
       const conv = normalizeConversation(raw);
-      if (!conv || seen.has(conv.id)) continue;
+      if (!conv || seen.has(conv.id) || isSettingsConversation(conv.id)) continue;
       seen.add(conv.id);
       collected.push(conv);
     }
@@ -233,15 +233,6 @@ async function listInboxIndex(store: InboxStore): Promise<InboxConversation[]> {
   return collected.filter((conv) => knownPlatform(conv.platform) || conv.inbox === true);
 }
 
-function configuredPlatforms(env: Record<string, string | undefined>): Record<string, boolean> {
-  const adapters = buildAdapters(env as any);
-  const configured: Record<string, boolean> = {};
-  for (const name of PLATFORMS) {
-    configured[name] = Boolean((adapters as Record<string, unknown>)[name]);
-  }
-  return configured;
-}
-
 export async function onRequestPost(context: CloudFunctionContext): Promise<Response> {
   const startTime = Date.now();
   logger.log(`[inbox] start: ${new Date(startTime).toISOString()}`);
@@ -293,7 +284,7 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
         byPlatform,
       },
       platformsConfigured: configuredPlatforms(
-        (context.env ?? {}) as Record<string, string | undefined>,
+        await loadSettings(store as unknown as SettingsStore),
       ),
     });
   } catch (e) {

@@ -63,21 +63,13 @@ export function isDiscordBotToken(value: string): boolean {
 
 export function resolveDiscordEnv(env: DiscordEnv): DiscordEnv {
   return {
-    DISCORD_BOT_TOKEN: normalizeSecret(env.DISCORD_BOT_TOKEN || process.env.DISCORD_BOT_TOKEN),
-    DISCORD_PUBLIC_KEY: normalizeSecret(env.DISCORD_PUBLIC_KEY || process.env.DISCORD_PUBLIC_KEY),
-    DISCORD_APPLICATION_ID: normalizeSecret(
-      env.DISCORD_APPLICATION_ID || process.env.DISCORD_APPLICATION_ID,
-    ),
-    DISCORD_MENTION_ROLE_IDS: normalizeSecret(
-      env.DISCORD_MENTION_ROLE_IDS || process.env.DISCORD_MENTION_ROLE_IDS,
-    ),
-    DISCORD_RESPOND_TO_CHANNEL_IDS: normalizeSecret(
-      env.DISCORD_RESPOND_TO_CHANNEL_IDS || process.env.DISCORD_RESPOND_TO_CHANNEL_IDS,
-    ),
-    DISCORD_GATEWAY_SECRET: normalizeSecret(
-      env.DISCORD_GATEWAY_SECRET || process.env.DISCORD_GATEWAY_SECRET,
-    ),
-    CRON_SECRET: normalizeSecret(env.CRON_SECRET || process.env.CRON_SECRET),
+    DISCORD_BOT_TOKEN: normalizeSecret(env.DISCORD_BOT_TOKEN),
+    DISCORD_PUBLIC_KEY: normalizeSecret(env.DISCORD_PUBLIC_KEY),
+    DISCORD_APPLICATION_ID: normalizeSecret(env.DISCORD_APPLICATION_ID),
+    DISCORD_MENTION_ROLE_IDS: normalizeSecret(env.DISCORD_MENTION_ROLE_IDS),
+    DISCORD_RESPOND_TO_CHANNEL_IDS: normalizeSecret(env.DISCORD_RESPOND_TO_CHANNEL_IDS),
+    DISCORD_GATEWAY_SECRET: normalizeSecret(env.DISCORD_GATEWAY_SECRET),
+    CRON_SECRET: normalizeSecret(env.CRON_SECRET),
   };
 }
 
@@ -141,7 +133,7 @@ export async function discordDeleteEmptyThread(
     return;
   }
 
-  const botToken = normalizeSecret(env.DISCORD_BOT_TOKEN || process.env.DISCORD_BOT_TOKEN);
+  const botToken = normalizeSecret(env.DISCORD_BOT_TOKEN);
   if (!botToken) throw new Error('DISCORD_BOT_TOKEN is not configured');
 
   const response = await fetch(`https://discord.com/api/v10/channels/${discordThreadId}`, {
@@ -238,7 +230,7 @@ export function discordPrepare(
     }
 
     if (!next.get('x-discord-gateway-token')) {
-      const token = normalizeSecret(env.DISCORD_BOT_TOKEN || process.env.DISCORD_BOT_TOKEN);
+      const token = normalizeSecret(env.DISCORD_BOT_TOKEN);
       if (token) {
         next.set('x-discord-gateway-token', token);
         logger.log(`injected gateway token for ${parsed.type}`);

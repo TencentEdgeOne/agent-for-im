@@ -4,6 +4,7 @@ const en = {
   "search.placeholder": "Search messages, channels, users…",
   "search.hotkey": "⌘K",
   "header.refresh": "Refresh",
+  "header.setup": "Setup",
   "header.lastRefresh": "Last refresh",
   "header.notLoaded": "Not loaded",
   "lang.zh": "ZH",

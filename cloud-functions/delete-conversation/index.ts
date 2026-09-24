@@ -22,6 +22,7 @@
 
 import type { CloudFunctionContext } from '@edgeone/types';
 import { createLogger } from '../_logger';
+import { isSettingsConversation } from '../_settings';
 
 const logger = createLogger('delete-conversation');
 
@@ -63,7 +64,7 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
 
   logger.log('conversationId:', conversationId, 'userId:', userId || '-');
 
-  if (!conversationId) {
+  if (!conversationId || isSettingsConversation(conversationId)) {
     logger.error('Missing conversationId');
     logger.log(`[delete-conversation] end: ${new Date().toISOString()}, total: ${Date.now() - startTime}ms`);
     return jsonResponse({ status: 'error', message: 'conversation_id is required' }, 400);

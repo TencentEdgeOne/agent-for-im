@@ -31,13 +31,9 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 export function resolveDingtalkEnv(env: DingtalkEnv): DingtalkEnv {
   return {
-    DINGTALK_APP_KEY: normalizeSecret(env.DINGTALK_APP_KEY || process.env.DINGTALK_APP_KEY),
-    DINGTALK_APP_SECRET: normalizeSecret(
-      env.DINGTALK_APP_SECRET || process.env.DINGTALK_APP_SECRET,
-    ),
-    DINGTALK_ROBOT_CODE: normalizeSecret(
-      env.DINGTALK_ROBOT_CODE || process.env.DINGTALK_ROBOT_CODE,
-    ),
+    DINGTALK_APP_KEY: normalizeSecret(env.DINGTALK_APP_KEY),
+    DINGTALK_APP_SECRET: normalizeSecret(env.DINGTALK_APP_SECRET),
+    DINGTALK_ROBOT_CODE: normalizeSecret(env.DINGTALK_ROBOT_CODE),
   };
 }
 

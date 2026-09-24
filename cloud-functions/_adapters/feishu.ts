@@ -34,12 +34,10 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 export function resolveFeishuEnv(env: FeishuEnv): FeishuEnv {
   return {
-    FEISHU_APP_ID: normalizeSecret(env.FEISHU_APP_ID || process.env.FEISHU_APP_ID),
-    FEISHU_APP_SECRET: normalizeSecret(env.FEISHU_APP_SECRET || process.env.FEISHU_APP_SECRET),
-    FEISHU_ENCRYPT_KEY: normalizeSecret(env.FEISHU_ENCRYPT_KEY || process.env.FEISHU_ENCRYPT_KEY),
-    FEISHU_VERIFICATION_TOKEN: normalizeSecret(
-      env.FEISHU_VERIFICATION_TOKEN || process.env.FEISHU_VERIFICATION_TOKEN,
-    ),
+    FEISHU_APP_ID: normalizeSecret(env.FEISHU_APP_ID),
+    FEISHU_APP_SECRET: normalizeSecret(env.FEISHU_APP_SECRET),
+    FEISHU_ENCRYPT_KEY: normalizeSecret(env.FEISHU_ENCRYPT_KEY),
+    FEISHU_VERIFICATION_TOKEN: normalizeSecret(env.FEISHU_VERIFICATION_TOKEN),
   };
 }
 
@@ -113,7 +111,7 @@ export function feishuHandshake(
   env?: Record<string, string | undefined>,
 ): Response | undefined {
   const payload = feishuPayload(rawBody, parsedBody);
-  const encryptKey = normalizeSecret(env?.FEISHU_ENCRYPT_KEY || process.env.FEISHU_ENCRYPT_KEY);
+  const encryptKey = normalizeSecret(env?.FEISHU_ENCRYPT_KEY);
 
   if (payload?.type === 'url_verification' && typeof payload.challenge === 'string') {
     return jsonResponse({ challenge: payload.challenge });

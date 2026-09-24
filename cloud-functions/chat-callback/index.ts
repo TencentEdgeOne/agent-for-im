@@ -17,6 +17,7 @@ import { vendorAdapter } from '../_adapters';
 import { getChatBot } from '../_bot';
 import { callbackSecret, isCallbackAuthorized, type CallbackRequest } from '../_callback';
 import { createLogger } from '../_logger';
+import { loadSettings, type SettingsStore } from '../_settings';
 
 const logger = createLogger('chat-callback');
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=UTF-8' } as const;
@@ -57,7 +58,8 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
   logger.log(`[chat-callback] start: ${new Date(startTime).toISOString()}`);
 
   try {
-    const secret = callbackSecret(context.env);
+    const env = await loadSettings(context.agent?.store as SettingsStore | undefined);
+    const secret = callbackSecret(env);
     if (!secret) {
       logger.error('AGENT_CALLBACK_SECRET is not configured');
       return jsonResponse({ status: 'error', message: 'callback secret is not configured' }, 500);
@@ -77,7 +79,7 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
     const platform = target.thread.id.split(':')[0] ?? '';
     const vendor = vendorAdapter(platform);
     if (vendor?.deliver) {
-      await vendor.deliver(context.env, target.thread.id, text);
+      await vendor.deliver(env, target.thread.id, text);
       logger.log(`[chat-callback] done via deliver: total ${Date.now() - startTime}ms`);
       return jsonResponse({ status: 'ok' });
     }
@@ -93,7 +95,7 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
     }
 
     // Builds the Chat singleton that ThreadImpl.fromJSON resolves its adapter from.
-    getChatBot(context.env);
+    getChatBot(env);
 
     const thread = ThreadImpl.fromJSON(target.thread);
     if (target.message) {

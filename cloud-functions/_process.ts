@@ -12,6 +12,7 @@ import type { CloudFunctionContext, EdgeoneRequest } from '@edgeone/types';
 import type { VendorAdapter, VendorRespond } from './_adapters';
 import { getChatBot, requestContext, type ChatBot } from './_bot';
 import { createLogger } from './_logger';
+import { loadSettings, type SettingsStore } from './_settings';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json; charset=UTF-8' } as const;
 
@@ -199,7 +200,8 @@ export async function runChatWebhook(
   const incomingKind = bodyKind(request.body);
   logger.log(opts.summarize?.(rawBody, request) ?? `body_kind=${incomingKind} body_len=${rawBody.length}`);
 
-  const handshake = opts.handshake?.(rawBody, request.body, context.env);
+  const env = await loadSettings(context.agent?.store as SettingsStore | undefined);
+  const handshake = opts.handshake?.(rawBody, request.body, env);
   if (handshake) {
     logger.log('handshake reply');
     return handshake;
@@ -211,12 +213,12 @@ export async function runChatWebhook(
     return opts.ack?.() ?? emptyOk();
   }
 
-  const envError = opts.assertEnv(context.env);
+  const envError = opts.assertEnv(env);
   if (envError) return envError;
 
   let webRequest = toStandardRequest(request, rawBody);
   if (opts.prepare) {
-    const prepared = opts.prepare(rawBody, webRequest.headers, context.env);
+    const prepared = opts.prepare(rawBody, webRequest.headers, env);
     rawBody = prepared.rawBody;
     webRequest = new Request(request.url, {
       method: webRequest.method,
@@ -225,7 +227,6 @@ export async function runChatWebhook(
     });
   }
   const origin = requestOrigin(request);
-  const env = context.env;
   const respond: VendorRespond = opts.respond?.(rawBody, webRequest) ?? 'ack';
   const hasVendorSig = Boolean(
     webRequest.headers.get('x-slack-signature') ||
@@ -328,9 +329,10 @@ export function createVendorWebhookGet(adapter: VendorAdapter) {
     if (!request) {
       return jsonResponse({ status: 'error', message: 'missing request' }, 400);
     }
-    const envError = adapter.assertEnv(context.env);
+    const env = await loadSettings(context.agent?.store as SettingsStore | undefined);
+    const envError = adapter.assertEnv(env);
     if (envError) return envError;
-    const reply = await adapter.handshakeGet?.(request, context.env);
+    const reply = await adapter.handshakeGet?.(request, env);
     if (!reply) {
       logger.error('GET handshake is not implemented');
       return jsonResponse({ status: 'error', message: 'unsupported method' }, 405);

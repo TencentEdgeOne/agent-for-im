@@ -20,6 +20,7 @@ import {
   type InboxSource,
 } from '../_inbox';
 import { createLogger } from '../_logger';
+import { isSettingsConversation } from '../_settings';
 
 const logger = createLogger('history');
 
@@ -206,7 +207,7 @@ export async function onRequestPost(context: CloudFunctionContext): Promise<Resp
 
   logger.log('conversationId:', conversationId || '-');
 
-  if (!conversationId) {
+  if (!conversationId || isSettingsConversation(conversationId)) {
     return jsonResponse({ conversation_id: conversationId, messages: [], conversation: null });
   }
 

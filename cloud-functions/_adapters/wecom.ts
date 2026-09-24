@@ -38,13 +38,11 @@ function jsonResponse(data: unknown, status = 200): Response {
 
 export function resolveWecomEnv(env: WecomEnv): WecomEnv {
   return {
-    WECOM_CORP_ID: normalizeSecret(env.WECOM_CORP_ID || process.env.WECOM_CORP_ID),
-    WECOM_AGENT_ID: normalizeSecret(env.WECOM_AGENT_ID || process.env.WECOM_AGENT_ID),
-    WECOM_APP_SECRET: normalizeSecret(env.WECOM_APP_SECRET || process.env.WECOM_APP_SECRET),
-    WECOM_TOKEN: normalizeSecret(env.WECOM_TOKEN || process.env.WECOM_TOKEN),
-    WECOM_ENCODING_AES_KEY: normalizeSecret(
-      env.WECOM_ENCODING_AES_KEY || process.env.WECOM_ENCODING_AES_KEY,
-    ),
+    WECOM_CORP_ID: normalizeSecret(env.WECOM_CORP_ID),
+    WECOM_AGENT_ID: normalizeSecret(env.WECOM_AGENT_ID),
+    WECOM_APP_SECRET: normalizeSecret(env.WECOM_APP_SECRET),
+    WECOM_TOKEN: normalizeSecret(env.WECOM_TOKEN),
+    WECOM_ENCODING_AES_KEY: normalizeSecret(env.WECOM_ENCODING_AES_KEY),
   };
 }
 
